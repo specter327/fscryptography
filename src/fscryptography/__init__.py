@@ -1,5 +1,6 @@
-from .crypto import Crypto
 """Filesystem-oriented cryptographic operations."""
+
+from .crypto import Crypto
 
 from .errors import (
     AtomicOperationError,
