@@ -38,6 +38,7 @@ La cadena Base64 por sí sola no permite recuperar el contenido de un contenedor
 - Contexto operativo: primitivas Tink abiertas para contenido y nombres.
 - Exportación: Manager.export_key() vuelve a codificar los bytes internos a Base64.
 - Cambio: Manager.change_key() abre y valida la nueva clave antes de reemplazar el contexto. Ante un error, conserva intacto el contexto anterior.
+- Alcance: change_key() cambia el contexto de operaciones futuras; no vuelve a cifrar archivos existentes ni reescribe sus cabeceras. Cada archivo sigue vinculado a la MasterKey con la que fue creado.
 
 Base64 es una codificación de transporte, no una protección criptográfica. No debe asumirse que el valor representa directamente 32 bytes AES.
 
@@ -65,7 +66,7 @@ La integración filesystem está validada en CI sobre Ubuntu 22.04.5/24.04.5 con
 
 ## Responsabilidad del consumidor
 
-La librería no administra almacenamiento, transporte, intercambio, backup, recuperación, rotación ni revocación. El consumidor debe conservar el contenedor MasterKey y, cuando esté protegido, la contraseña. Perder cualquiera de los elementos requeridos implica pérdida práctica de acceso.
+La librería no administra almacenamiento, transporte, intercambio, backup, recuperación de datos, migración de recursos ni rotación/revocación global de claves. change_key() solo cambia el contexto activo del gestor. El consumidor debe conservar el contenedor MasterKey y, cuando esté protegido, la contraseña. Perder cualquiera de los elementos requeridos implica pérdida práctica de acceso.
 
 
 ## Concurrencia de operaciones y rotación

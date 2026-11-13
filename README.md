@@ -359,6 +359,8 @@ Esta librería manipula claves criptográficas y recursos del usuario. Antes de 
 La documentación normativa y de diseño se mantiene separada del manual de uso:
 
 - [Índice de documentación](docs/index.md)
+- [Versionado y compatibilidad](docs/versioning.md)
+- [Historial de cambios](CHANGELOG.md)
 - [Contrato de API](docs/api-reference.md)
 - [Arquitectura](docs/architecture.md)
 - [Diseño criptográfico](docs/cryptographic-design.md)
