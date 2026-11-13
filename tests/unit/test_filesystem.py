@@ -438,3 +438,11 @@ def test_encrypted_and_decrypted_files_use_restrictive_mode(manager, tmp_path):
     manager.file.decrypt(encrypted)
     assert source.stat().st_mode & 0o777 == 0o600
     assert source.read_bytes() == b"private payload"
+
+    transaction_dirs = list(tmp_path.glob(".fscryptography-txn-*"))
+    assert transaction_dirs
+    for transaction_dir in transaction_dirs:
+        assert transaction_dir.stat().st_mode & 0o777 == 0o700
+        journal = transaction_dir / "journal.json"
+        if journal.exists():
+            assert journal.stat().st_mode & 0o777 == 0o600
