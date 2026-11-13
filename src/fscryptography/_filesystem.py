@@ -256,6 +256,32 @@ def _read_header(stream: BinaryIO):
     return parse_header(fixed + _read_exact(stream, header_length - FIXED_HEADER_SIZE))
 
 
+def _assert_source_unchanged(stream: BinaryIO, expected: os.stat_result) -> None:
+    """Reject ordinary in-place source mutations observed during streaming.
+
+    This detects identity, size, mtime, and ctime changes. It is not a defense
+    against a hostile writer able to manipulate filesystem metadata or race
+    within the filesystem timestamp granularity.
+    """
+    current = os.fstat(stream.fileno())
+    identity_before = (expected.st_dev, expected.st_ino)
+    identity_after = (current.st_dev, current.st_ino)
+    metadata_before = (
+        expected.st_size,
+        getattr(expected, "st_mtime_ns", int(expected.st_mtime * 1_000_000_000)),
+        getattr(expected, "st_ctime_ns", int(expected.st_ctime * 1_000_000_000)),
+    )
+    metadata_after = (
+        current.st_size,
+        getattr(current, "st_mtime_ns", int(current.st_mtime * 1_000_000_000)),
+        getattr(current, "st_ctime_ns", int(current.st_ctime * 1_000_000_000)),
+    )
+    if identity_before != identity_after or metadata_before != metadata_after:
+        raise AtomicOperationError(
+            "source content or identity changed during the operation; source was preserved"
+        )
+
+
 def _copy_encrypt(primitive, source: BinaryIO, destination: BinaryIO, aad: bytes) -> None:
     try:
         with primitive.new_encrypting_stream(_NonClosing(destination), aad) as encrypted:
@@ -476,6 +502,7 @@ class _FileOperations:
                     output,
                     header,
                 )
+                _assert_source_unchanged(original, source_info)
                 _sync_close(output)
             transaction.set_result_ready(transaction.stat_result())
             if anchor is not None:
@@ -555,6 +582,7 @@ class _FileOperations:
                     output,
                     header.raw,
                 )
+                _assert_source_unchanged(encrypted, source_info)
                 _sync_close(output)
             transaction.set_result_ready(transaction.stat_result())
             if anchor is not None:
