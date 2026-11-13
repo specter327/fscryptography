@@ -30,7 +30,7 @@ El contenedor contiene keysets independientes para las operaciones criptográfic
 
 `MasterKey` es opaco para el consumidor: no expone keysets, claves derivadas, nonces internos ni detalles del backend. El contenedor de claves es distinto del formato de cada archivo o nombre cifrado.
 
-La estructura lógica y los requisitos normativos se especifican en [Formato de MasterKey](master-key-format.md). La disposición binaria exacta y la serialización concreta de keysets quedan sujetas a la validación del backend.
+La estructura lógica y la propuesta de disposición binaria v1 se especifican en [Formato de MasterKey](master-key-format.md). Los casos de conformidad previstos están en [Plan de pruebas del formato MasterKey](master-key-format-test-plan.md). La propuesta de layout aún requiere aprobación y cierre de sus límites criptográficos antes de implementar.
 
 ## Generación aleatoria
 
