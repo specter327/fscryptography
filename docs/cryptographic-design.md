@@ -20,7 +20,7 @@ La validación de APIs, keysets, Argon2id y AEAD de envoltura se mantiene en [Va
 
 El perfil AEAD seleccionado para el prototipo es Tink `AES256_GCM`, mediante la interfaz convencional `Aead` y un keyset independiente del destinado al contenido. La prueba de integración en `tests/backend_validation/test_tink_aead_names.py` validó generación/recuperación de keyset, round-trip y rechazo de AAD incorrecto, alteración y truncamiento en Tink 1.16.1 con Python 3.10–3.13 (GitHub Actions Run 10).
 
-Tink administra nonce, prefijo de salida y tag. No se implementará AES-GCM manualmente. El perfil criptográfico y el tipo de keyset están validados para el prototipo; la codificación del nombre, el límite de longitud y la compatibilidad de filesystem siguen pendientes. La propuesta se detalla en [Cifrado de nombres](filename-encryption.md).
+Tink administra nonce, prefijo de salida y tag. No se implementará AES-GCM manualmente. El perfil criptográfico y el tipo de keyset están validados para el prototipo. El contrato de representación queda aprobado: marcador `~1`, ciphertext Tink en Base64URL sin padding y máximo derivado de 156 bytes UTF-8 cuando el límite del componente es 255 bytes. La compatibilidad y validación sobre filesystems objetivo siguen pendientes. Véase [Cifrado de nombres](filename-encryption.md).
 
 ## Separación de claves
 
