@@ -32,7 +32,7 @@ class Transaction:
 
     @classmethod
     def begin(cls, parent: Path, operation: str, source_name: str,
-              destination_name: str, source_info, *, parent_fd: int | None = None):
+              destination_name: str, *, parent_fd: int | None = None):
         if operation not in {"file_encrypt", "file_decrypt", "dir_encrypt", "dir_decrypt"}:
             raise ValueError("invalid transaction operation")
         if not source_name or not destination_name or source_name == destination_name:
