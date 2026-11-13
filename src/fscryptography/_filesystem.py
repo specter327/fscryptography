@@ -163,7 +163,7 @@ def _check_source(path: Path, *, directory: bool) -> os.stat_result:
     except OSError:
         raise
     if stat.S_ISLNK(info.st_mode) or _is_reparse_point(info):
-        raise UnsupportedResourceError("symbolic links are not supported")
+        raise UnsupportedResourceError("symbolic links and filesystem reparse points are not supported")
     if directory and not stat.S_ISDIR(info.st_mode):
         raise UnsupportedResourceError("resource is not a directory")
     if not directory and not stat.S_ISREG(info.st_mode):
