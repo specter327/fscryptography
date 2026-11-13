@@ -111,7 +111,9 @@ def test_tampered_file_preserves_ciphertext(manager, tmp_path):
 
     assert encrypted.exists()
     assert not source.exists()
-    assert not any(path.name.startswith(".fscryptography-") for path in tmp_path.iterdir())
+    records = manager.inspect_recovery(tmp_path)
+    assert len(records) == 1
+    assert records[0].classification == "result_incomplete_or_unverified"
 
 
 def test_invalid_header_preserves_source(manager, tmp_path):
@@ -131,7 +133,7 @@ def test_directory_only_renames_its_own_component(manager, tmp_path):
     child.write_text("unchanged", encoding="utf-8")
 
     manager.dir.encrypt(directory)
-    encrypted = next(path for path in tmp_path.iterdir() if path.is_dir())
+    encrypted = next(path for path in tmp_path.iterdir() if path.is_dir() and path.name.startswith("~1"))
     assert encrypted.name.startswith("~1")
     assert (encrypted / "child.txt").read_text(encoding="utf-8") == "unchanged"
 
