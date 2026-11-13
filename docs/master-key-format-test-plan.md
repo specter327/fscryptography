@@ -2,7 +2,7 @@
 
 ## Propósito
 
-Definir la suite de conformidad del contenedor `MasterKey` antes de implementar el parser y la gestión de claves. Este documento especifica resultados esperados y límites de prueba; no contiene una implementación alternativa del formato.
+Definir la suite de conformidad del contenedor `MasterKey` y mantener verificable su implementación productiva. Este documento especifica resultados esperados y límites de prueba; no contiene una implementación alternativa del formato.
 
 Las pruebas se dividirán entre:
 - **Pruebas de estructura:** framing binario, longitudes, versiones y campos.
