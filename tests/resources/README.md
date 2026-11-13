@@ -10,7 +10,13 @@ Esta carpeta contiene los recursos físicos utilizados por la suite de integraci
 - La suite no selecciona ni modifica archivos preexistentes del usuario.
 - No coloques aquí documentos personales ni archivos que contengan secretos.
 
-Ejecuta la demostración desde la raíz del repositorio:
+Instala el proyecto y sus dependencias de prueba desde la raíz del repositorio:
+
+```bash
+python -m pip install -e ".[test]"
+```
+
+Ejecuta la demostración:
 
 ```bash
 python tests/real_resources/test_real_resources.py
