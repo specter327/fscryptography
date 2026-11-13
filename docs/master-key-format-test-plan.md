@@ -93,7 +93,7 @@ El fuzzing no sustituye vectores golden ni pruebas criptográficas.
 La fase de especificación del formato se considera cerrada cuando:
 1. [x] Se aprueba el layout binario v1 y sus límites.
 2. [x] Se ejecuta el benchmark de referencia y se aprueba el perfil Argon2id v1 (64 MiB / 3 / p=1), junto con los límites normativos de entrada y contraseña de [la política de Argon2id](argon2id-policy.md).
-3. [~] Se valida el perfil AEAD de nombres Tink `AES256_GCM` y el tipo `Aead`; faltan aprobación de la codificación del componente y su límite de longitud.
+3. [~] Se valida el perfil AEAD de nombres Tink `AES256_GCM` y el tipo `Aead`; se aprobaron `~1` + Base64URL sin padding y el límite de 156 bytes UTF-8 para componentes de 255 bytes. La validación sobre filesystems objetivo sigue pendiente.
 4. [~] Se publican vectores golden iniciales de estructura y envoltura; faltan vectores de keysets Tink válidos e inválidos.
 5. [ ] Se acuerda el catálogo de errores de parsing/autenticación.
 6. [ ] Se define la matriz de plataformas para ejecutar la conformidad.
