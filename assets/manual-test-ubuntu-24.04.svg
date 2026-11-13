@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+<title id="title">fscryptography — resultado real de prueba manual en Ubuntu 24.04</title>
+<desc id="desc">Captura vectorial estilo terminal, con rutas e identificadores censurados. Quince comprobaciones pasaron y una falló por combinar new_extension con encrypt_name, una combinación no permitida por la API.</desc>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#10151d"/><stop offset="1" stop-color="#202a37"/></linearGradient>
+  <linearGradient id="bar" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#273449"/><stop offset="1" stop-color="#1c2735"/></linearGradient>
+  <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#000" flood-opacity=".38"/></filter>
+  <style>
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace}
+    .ui{font-family:Inter,Segoe UI,Arial,sans-serif}
+    .muted{fill:#93a4b8}.white{fill:#e8eef6}.green{fill:#78dba9}.amber{fill:#ffc66d}.red{fill:#ff8d8d}
+    .line{font-size:24px}.small{font-size:19px}.label{font-size:17px;letter-spacing:2px}
+  </style>
+</defs>
+<rect width="1600" height="1000" fill="#0b1017"/>
+<rect x="90" y="64" width="1420" height="872" rx="24" fill="url(#bg)" stroke="#344254" stroke-width="2" filter="url(#shadow)"/>
+<path d="M90 88a24 24 0 0 1 24-24h1372a24 24 0 0 1 24 24v64H90z" fill="url(#bar)"/>
+<circle cx="132" cy="108" r="9" fill="#ff6b68"/><circle cx="164" cy="108" r="9" fill="#f6c45b"/><circle cx="196" cy="108" r="9" fill="#62c985"/>
+<text x="800" y="116" text-anchor="middle" class="ui muted" font-size="20">Terminal · fscryptography · ejecución manual real</text>
+<text x="140" y="205" class="ui white" font-size="34" font-weight="700">Prueba de filesystem · Ubuntu 24.04</text>
+<text x="140" y="244" class="mono muted" font-size="20">Linux x86_64  ·  Python 3.12.3  ·  kernel #&lt;REDACTED&gt;</text>
+<text x="140" y="292" class="mono muted" font-size="19">$ python3 &lt;script-de-prueba&gt;.py</text>
+<line x1="140" y1="320" x2="1460" y2="320" stroke="#3b4b60" stroke-width="1"/>
+<text x="140" y="370" class="mono green line">[PASS] Entorno y versión del runtime</text>
+<text x="140" y="414" class="mono green line">[PASS] Generación de MasterKey aleatoria y protegida</text>
+<text x="140" y="458" class="mono green line">[PASS] Inicialización y cierre de Manager</text>
+<text x="140" y="502" class="mono green line">[PASS] Cifrado / descifrado · SHA-256 coincidente</text>
+<text x="140" y="546" class="mono green line">[PASS] Archivos de 0 B a 1 MiB · round-trip verificado</text>
+<text x="140" y="590" class="mono green line">[PASS] Extensión personalizada y exportación de clave</text>
+<text x="140" y="634" class="mono green line">[PASS] Nombre de directorio · contenido interior intacto</text>
+<text x="140" y="678" class="mono green line">[PASS] Inspección del journal · solo lectura</text>
+<text x="140" y="722" class="mono amber line">[FAIL] Cifrado de nombre: argumento incompatible en la prueba</text>
+<text x="140" y="765" class="mono red small">ValueError: new_extension cannot be used when encrypt_name=True</text>
+<text x="140" y="817" class="mono muted small">Ruta de trabajo: /home/&lt;REDACTED&gt;/&lt;WORKSPACE-REDACTED&gt;</text>
+<rect x="140" y="850" width="1320" height="1" fill="#3b4b60"/>
+<text x="140" y="895" class="ui white" font-size="24" font-weight="700">15 / 16 comprobaciones · 93,75 %</text>
+<text x="1460" y="895" text-anchor="end" class="ui amber" font-size="20">1 fallo de invocación · no de cifrado</text>
+</svg>
