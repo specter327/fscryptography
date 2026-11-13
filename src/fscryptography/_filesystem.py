@@ -249,21 +249,21 @@ class _FileOperations:
             raise ValueError("encrypted destination must differ from the source path")
 
         fd, temporary = _temporary_file(source_path.parent)
+        output = os.fdopen(fd, "wb")
         published = False
         try:
             with source_path.open("rb") as original:
                 current = os.fstat(original.fileno())
                 if (current.st_dev, current.st_ino) != (source_info.st_dev, source_info.st_ino):
                     raise InvalidPathError("source changed while the operation was starting")
-                with os.fdopen(fd, "wb") as output:
-                    output.write(header)
-                    _copy_encrypt(
-                        self._manager._content_primitive,
-                        original,
-                        output,
-                        header,
-                    )
-                    _sync_close(output)
+                output.write(header)
+                _copy_encrypt(
+                    self._manager._content_primitive,
+                    original,
+                    output,
+                    header,
+                )
+                _sync_close(output)
             _publish_noreplace(temporary, destination)
             published = True
             try:
@@ -276,6 +276,8 @@ class _FileOperations:
                     raise
                 raise AtomicOperationError("encrypted output was published but source removal failed") from exc
         finally:
+            if not output.closed:
+                output.close()
             if not published:
                 try:
                     temporary.unlink(missing_ok=True)
@@ -289,6 +291,7 @@ class _FileOperations:
         profile = _profile()
         limit = _component_limit(source_path.parent)
         fd, temporary = _temporary_file(source_path.parent)
+        output = os.fdopen(fd, "wb")
         published = False
         try:
             with source_path.open("rb") as encrypted:
@@ -314,14 +317,13 @@ class _FileOperations:
                 destination = source_path.with_name(destination_name)
                 if destination == source_path:
                     raise ValueError("decrypted destination must differ from the source path")
-                with os.fdopen(fd, "wb") as output:
-                    _copy_decrypt(
-                        self._manager._content_primitive,
-                        encrypted,
-                        output,
-                        header.raw,
-                    )
-                    _sync_close(output)
+                _copy_decrypt(
+                    self._manager._content_primitive,
+                    encrypted,
+                    output,
+                    header.raw,
+                )
+                _sync_close(output)
             _publish_noreplace(temporary, destination)
             published = True
             try:
