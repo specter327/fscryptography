@@ -196,8 +196,8 @@ def generate_master_key(*, password: str | None = None) -> str:
     return base64.b64encode(binary).decode("ascii")
 
 
-def open_master_key(master_key: str, *, password: str | None = None) -> _KeyMaterial:
-    """Validate and open a MasterKey container, returning both Tink primitives."""
+def _decode_master_key(master_key: str) -> bytes:
+    """Decode and validate the public Base64 representation."""
     if not isinstance(master_key, str):
         raise TypeError("master_key must be str")
     try:
@@ -212,6 +212,13 @@ def open_master_key(master_key: str, *, password: str | None = None) -> _KeyMate
         raise FormatError("MasterKey is not valid Base64") from exc
     if base64.b64encode(binary) != encoded:
         raise FormatError("MasterKey Base64 is not canonical")
+    return binary
+
+
+def _open_master_key_bytes(binary: bytes, *, password: str | None = None) -> _KeyMaterial:
+    """Open an already-decoded MasterKey container."""
+    if not isinstance(binary, bytes):
+        raise TypeError("binary MasterKey must be bytes")
     if len(binary) > _MAX_BINARY or len(binary) < _HEADER_RANDOM:
         raise FormatError("MasterKey binary size is invalid")
     if binary[:8] != _MAGIC:
@@ -279,3 +286,9 @@ def open_master_key(master_key: str, *, password: str | None = None) -> _KeyMate
         raise FormatError("MasterKey logical payload exceeds the size limit")
     content_keyset, names_keyset = _split_payload(logical_payload)
     return _restore_key_material(content_keyset, names_keyset)
+
+
+
+def open_master_key(master_key: str, *, password: str | None = None) -> _KeyMaterial:
+    """Validate and open the public Base64 MasterKey representation."""
+    return _open_master_key_bytes(_decode_master_key(master_key), password=password)
