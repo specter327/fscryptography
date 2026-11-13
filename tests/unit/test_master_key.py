@@ -16,7 +16,7 @@ def test_random_master_key_restores_independent_tink_primitives():
     encrypted_name = encrypt_name("documento-ñ.txt", material.names)
     assert decrypt_name(encrypted_name, material.names) == "documento-ñ.txt"
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         open_master_key(master_key, password="unexpected")
 
 
