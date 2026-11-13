@@ -356,6 +356,7 @@ def test_directory_replacement_during_rename_is_restored(manager, tmp_path, monk
 
 
 
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="descriptor-relative directory anchoring is GNU/Linux-only")
 def test_directory_decrypt_rejects_replacement_during_rename(manager, tmp_path, monkeypatch):
     source = tmp_path / "private-directory"
     source.mkdir()
