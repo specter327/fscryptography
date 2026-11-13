@@ -195,7 +195,8 @@ def test_destination_identity_mismatch_is_ambiguous(tmp_path):
     transaction.set_result_ready(transaction.result_path.lstat())
     os.rename(transaction.result_path, destination)
     transaction.set_state("published")
-    destination.unlink()
+    retained = tmp_path / "retained-destination"
+    destination.rename(retained)
     destination.write_bytes(b"unrelated replacement")
 
     record = inspect(tmp_path)[0]
