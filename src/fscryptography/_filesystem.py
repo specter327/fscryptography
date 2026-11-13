@@ -669,6 +669,7 @@ class _FileOperations:
                 anchor.sync()
             else:
                 _publish_noreplace(temporary, destination)
+                transaction.mark_result_published()
                 _sync_parent_directory(source_path.parent)
             published = True
             transaction.set_state("published")
@@ -749,6 +750,7 @@ class _FileOperations:
                 os.fsync(transaction.directory_fd)
             else:
                 _publish_noreplace(transaction.result_path, destination)
+                transaction.mark_result_published()
                 _sync_parent_directory(source_path.parent)
                 _sync_parent_directory(transaction.directory)
             published = True
