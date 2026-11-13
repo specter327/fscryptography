@@ -146,17 +146,22 @@ Base64 no es cifrado. El modo aleatorio debe protegerse como una credencial secr
 
 ## Estado de decisiones
 
-**Propuesto en esta revisión, pendiente de aprobación:**
-- Magic, campos, offsets, tamaños y big-endian del contenedor v1.
-- Framing del payload con dos longitudes Protobuf.
-- Límites estructurales de 32 KiB por keyset y 64 KiB por payload.
+**Aprobado:**
+- Layout binario `MasterKey v1.0`: magic, campos, offsets, tamaños y codificación big-endian.
+- Framing del payload con dos longitudes Protobuf de Tink.
+- Límites estructurales de 32 KiB por keyset y 128 KiB por payload lógico.
 - Codificación UTF-8 estricta sin normalización implícita.
 
-**Pendiente antes de implementar:**
+**Validación de conformidad añadida:**
+- Vectores golden sintéticos para los modos aleatorio y protegido en `tests/master_key_format/fixtures/master_key_v1_vectors.json`.
+- Pruebas ejecutables de layout, framing, AAD, autenticación, alteraciones y truncamientos en `tests/master_key_format/test_master_key_format_vectors.py`.
+- Los keysets de estos vectores son bytes opacos sintéticos, no keysets Tink válidos. Las pruebas no sustituyen la integración de keysets ni un parser productivo.
+
+**Pendiente antes de implementar la gestión productiva de claves:**
 - Parámetros de producción Argon2id y límites máximos/mínimos de aceptación, definidos mediante benchmark y análisis de abuso de recursos.
 - Límite máximo de contraseña en bytes.
 - Perfil AEAD concreto para nombres y pruebas de compatibilidad del backend.
 - Vectores binarios golden definitivos y pruebas multiplataforma.
 - Política de versiones y migración más allá de v1.
 
-Esta especificación describe un formato propuesto; no implica que exista ya un parser o una implementación funcional.
+El layout binario v1.0 está aprobado y cuenta con vectores y pruebas de conformidad estructural. Esto no implica que exista ya un parser productivo ni una implementación funcional de gestión de claves.
