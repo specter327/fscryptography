@@ -28,9 +28,8 @@ La primera versión utiliza un único backend criptográfico; no se diseña una 
 
 - **Implementado:** validación y codec de nombres Tink; generación/apertura de MasterKey; recuperación de keysets; API `generate()`/`Manager`; cambio y exportación de clave; formato binario de archivo v1.0; cifrado/descifrado de archivos con Tink Streaming AEAD; cifrado/descifrado de nombres de archivos y directorios; temporales privados; publicación no-replace; sincronización del archivo temporal y del directorio padre en GNU/Linux.
 - **Implementado:** estado transaccional en memoria, temporales hermanos exclusivos, publicación no-replace y retirada del origen mediante staging con verificación de identidad.
-- **Pendiente:** resolución o limpieza explícita de transacciones, política de retención, robustecimiento frente a fallos inyectados y validación integral de filesystem.
 - **Pendiente de validación de plataforma:** comportamiento real en NTFS y ext4, límites Unicode exactos en Windows, colisiones bajo configuraciones case-sensitive y garantías de durabilidad.
-- **Pendiente de robustecimiento:** resolución explícita de transacciones, flush de directorio en Windows, pruebas de concurrencia/cambios hostiles y preservación de metadatos de filesystem.
+- **Pendiente de robustecimiento:** flush de directorio en Windows, pruebas de concurrencia/cambios hostiles y preservación de metadatos de filesystem.
 
 ## Flujo de cifrado implementado
 
