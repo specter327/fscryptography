@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -407,7 +408,6 @@ def test_path_directory_rename_restores_replaced_source(tmp_path, monkeypatch):
             replaced = True
         return real_rename(old, new)
 
-    from pathlib import Path
     monkeypatch.setattr(_filesystem.os, "rename", replace_before_rename)
 
     with pytest.raises(InvalidPathError, match="directory identity changed"):
