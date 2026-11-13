@@ -50,6 +50,19 @@ class _NonClosing:
     def flush(self):
         return self._stream.flush()
 
+    def readable(self):
+        return self._stream.readable()
+
+    def writable(self):
+        return self._stream.writable()
+
+    def seekable(self):
+        return self._stream.seekable()
+
+    @property
+    def closed(self):
+        return self._stream.closed
+
     def close(self):
         self._stream.flush()
 
