@@ -110,7 +110,7 @@ def _validate_component(name: str, parent: Path) -> None:
 
 def _publish_noreplace(source: Path, destination: Path) -> None:
     """Atomically rename within one filesystem without replacing a destination."""
-    # Transaction results live in a private sibling directory on the same filesystem.
+    # Transaction results live in an exclusive temporary sibling on the same filesystem.
     if os.name == "nt":
         try:
             os.rename(source, destination)
@@ -507,7 +507,7 @@ def _retire_source(
             os.rename(source_path, retained)  # Windows rename does not replace an existing target.
         except Exception as exc:
             raise AtomicOperationError(
-                f"{output_kind} was published but the source could not be quarantined safely"
+                f"{output_kind} was published but the source could not be staged safely"
             ) from exc
 
         try:
@@ -522,11 +522,11 @@ def _retire_source(
                     os.rename(retained, source_path)  # Fails rather than replacing a new source entry.
                 except Exception as restore_error:
                     raise AtomicOperationError(
-                        "source identity changed; the unexpected entry remains in transaction storage "
+                        "source identity changed; the unexpected entry remains in temporary sibling storage "
                         "for manual inspection"
                     ) from restore_error
                 raise AtomicOperationError(
-                    "source identity changed during quarantine; the unexpected entry was restored"
+                    "source identity changed during staging; the unexpected entry was restored"
                 )
 
             transaction.set_state("source_retained")
@@ -563,14 +563,14 @@ def _retire_source(
             except Exception as restore_error:
                 raise AtomicOperationError(
                     "source identity changed; the unexpected entry remains in transaction storage "
-                    "for explicit recovery inspection"
+                    "for manual inspection"
                 ) from restore_error
             raise AtomicOperationError(
                 "source identity changed before retirement; the unexpected source entry was restored"
             )
 
         # Persist both sides of the cross-directory rename before recording the
-        # retained state. A crash from this point is inspectable via txn/source.
+        # retained state. An abrupt termination from this point may leave the source under its temporary sibling name.
         anchor.sync()
         os.fsync(transaction.directory_fd)
         transaction.set_state("source_retained")
