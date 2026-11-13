@@ -4,7 +4,7 @@
 
 Proporciona una interfaz de alto nivel basada en rutas, con procesamiento autenticado y segmentado de archivos. Su diseño es autónomo: no depende de herramientas de exploración de recursos ni de aplicaciones concretas.
 
-> **Estado del proyecto:** implementación inicial en curso. Están implementados el contenedor MasterKey v1, el codec de nombres, la cabecera binaria de archivo v1.0 y las operaciones `Manager.file` / `Manager.dir` sobre rutas reales. Las operaciones de contenido usan Tink Streaming AEAD y temporales privados; la publicación no-replace usa `renameat2(RENAME_NOREPLACE)` en GNU/Linux y `os.rename` en Windows. En GNU/Linux también se sincroniza el directorio padre después de publicar y retirar recursos. El protocolo de journal persistente ya está especificado, pero todavía no está implementado.
+> **Estado del proyecto:** implementación inicial en curso. Están implementados el contenedor MasterKey v1, el codec de nombres, la cabecera binaria de archivo v1.0 y las operaciones `Manager.file` / `Manager.dir` sobre rutas reales. Las operaciones de contenido usan Tink Streaming AEAD y temporales privados; la publicación no-replace usa `renameat2(RENAME_NOREPLACE)` en GNU/Linux y `os.rename` en Windows. En GNU/Linux también se sincroniza el directorio padre después de publicar y retirar recursos. El journal persistente v1 y la inspección explícita de solo lectura están implementados inicialmente; no hay recuperación destructiva ni limpieza automática.
 
 ## Alcance
 
@@ -35,7 +35,7 @@ El trabajo se realizará en este orden:
 
 1. Ampliar vectores golden, pruebas negativas y mutación de formatos.
 2. Validar el comportamiento en Windows/NTFS y GNU/Linux/ext4 reales.
-3. Integrar el journal persistente y la inspección explícita de operaciones interrumpidas; después diseñar resolución segura.
+3. Ampliar pruebas de interrupción, concurrencia y seguridad del journal; después diseñar resolución explícita y retención segura.
 4. Completar durabilidad multiplataforma y pruebas de concurrencia.
 5. Consolidar la documentación, distribución y publicación en PyPI.
 
