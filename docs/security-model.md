@@ -12,7 +12,7 @@
 
 El diseño busca proteger frente a quien obtiene los archivos y nombres cifrados sin sus claves, y detectar alteraciones del ciphertext y de los metadatos autenticados.
 
-No se asume que el host esté libre de malware, depuradores privilegiados, captura de memoria, compromiso del proceso, administrador/root, kernel malicioso o procesos hostiles con permisos equivalentes al usuario que ejecuta la librería. Las ACL privadas y los directorios transaccionales no aíslan frente a procesos del mismo usuario.
+No se asume que el host esté libre de malware, depuradores privilegiados, captura de memoria, compromiso del proceso, administrador/root, kernel malicioso o procesos hostiles con permisos equivalentes al usuario que ejecuta la librería. Los temporales hermanos no aíslan frente a procesos del mismo usuario.
 
 ## Garantías implementadas y validadas
 
