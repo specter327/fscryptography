@@ -177,3 +177,42 @@ def test_destination_created_at_publication_is_never_overwritten(
 
     assert source.read_bytes() == b"source must survive"
     assert destination.read_bytes() == existing_payload
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows handle-based retirement")
+def test_windows_source_substitution_during_quarantine_is_never_deleted(
+    manager, tmp_path, monkeypatch
+):
+    """A path swapped immediately before quarantine must not be unlinked."""
+    source = tmp_path / "windows-quarantine-race.bin"
+    original_payload = b"original source object"
+    replacement_payload = b"competing replacement object"
+    source.write_bytes(original_payload)
+    displaced = tmp_path / "attacker-displaced-original.bin"
+    real_rename = os.rename
+    swapped = False
+
+    def substitute_before_quarantine(src, dst, *args, **kwargs):
+        nonlocal swapped
+        if not swapped and os.fspath(src) == os.fspath(source):
+            swapped = True
+            real_rename(source, displaced)
+            source.write_bytes(replacement_payload)
+        return real_rename(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(os, "rename", substitute_before_quarantine)
+
+    with pytest.raises(
+        fscryptography.AtomicOperationError, match="identity changed during quarantine"
+    ):
+        manager.file.encrypt(source)
+
+    assert swapped
+    assert source.read_bytes() == replacement_payload
+    assert displaced.read_bytes() == original_payload
+    assert (tmp_path / "windows-quarantine-race.fscrypt").is_file()
+    assert not any(
+        item.name == "source"
+        for transaction_dir in tmp_path.glob(".fscryptography-*")
+        for item in transaction_dir.iterdir()
+    )
+
