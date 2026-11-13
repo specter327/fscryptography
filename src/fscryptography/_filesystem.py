@@ -29,6 +29,7 @@ from .file_format import (
     split_extension,
 )
 from .names import NameProfile, decrypt_name, encrypt_name, validate_name
+from ._journal import Transaction
 
 _CHUNK_SIZE = 1024 * 1024
 _AT_FDCWD = -100
@@ -104,8 +105,7 @@ def _validate_component(name: str, parent: Path) -> None:
 
 def _publish_noreplace(source: Path, destination: Path) -> None:
     """Atomically rename within one filesystem without replacing a destination."""
-    if source.parent != destination.parent:
-        raise AtomicOperationError("temporary and destination must share a directory")
+    # Transaction results live in a private sibling directory on the same filesystem.
     if os.name == "nt":
         try:
             os.rename(source, destination)
@@ -290,7 +290,11 @@ class _FileOperations:
         if destination == source_path:
             raise ValueError("encrypted destination must differ from the source path")
 
-        fd, temporary = _temporary_file(source_path.parent)
+        transaction = Transaction.begin(
+            source_path.parent, "file_encrypt", source_path.name, destination.name, source_info
+        )
+        temporary = transaction.result_path
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
         output = os.fdopen(fd, "wb")
         published = False
         try:
@@ -306,10 +310,12 @@ class _FileOperations:
                     header,
                 )
                 _sync_close(output)
+            transaction.set_result_ready(temporary.lstat())
             _publish_noreplace(temporary, destination)
             published = True
-            # Persist the destination entry before removing the only source copy.
             _sync_parent_directory(source_path.parent)
+            _sync_parent_directory(transaction.directory)
+            transaction.set_state("published")
             try:
                 latest = source_path.lstat()
                 if (latest.st_dev, latest.st_ino) != (source_info.st_dev, source_info.st_ino):
@@ -319,20 +325,14 @@ class _FileOperations:
                 if isinstance(exc, AtomicOperationError):
                     raise
                 raise AtomicOperationError("encrypted output was published but source removal failed") from exc
-            try:
-                _sync_parent_directory(source_path.parent)
-            except AtomicOperationError as exc:
-                raise AtomicOperationError(
-                    "source was removed, but the namespace update could not be synchronized"
-                ) from exc
+            _sync_parent_directory(source_path.parent)
+            transaction.set_state("source_removed")
+            transaction.set_state("complete")
+            transaction.finish()
         finally:
             if not output.closed:
                 output.close()
-            if not published:
-                try:
-                    temporary.unlink(missing_ok=True)
-                except OSError:
-                    pass
+            # An unpublished result is retained for explicit inspection.
 
     def decrypt(self, path: str | os.PathLike[str]) -> None:
         self._manager._require_open()
@@ -340,8 +340,8 @@ class _FileOperations:
         source_info = _check_source(source_path, directory=False)
         profile = _profile()
         limit = _component_limit(source_path.parent)
-        fd, temporary = _temporary_file(source_path.parent)
-        output = os.fdopen(fd, "wb")
+        transaction = None
+        output = None
         published = False
         try:
             with source_path.open("rb") as encrypted:
@@ -367,6 +367,11 @@ class _FileOperations:
                 destination = source_path.with_name(destination_name)
                 if destination == source_path:
                     raise ValueError("decrypted destination must differ from the source path")
+                transaction = Transaction.begin(
+                    source_path.parent, "file_decrypt", source_path.name, destination.name, source_info
+                )
+                fd = os.open(transaction.result_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+                output = os.fdopen(fd, "wb")
                 _copy_decrypt(
                     self._manager._content_primitive,
                     encrypted,
@@ -374,10 +379,12 @@ class _FileOperations:
                     header.raw,
                 )
                 _sync_close(output)
-            _publish_noreplace(temporary, destination)
+            transaction.set_result_ready(transaction.result_path.lstat())
+            _publish_noreplace(transaction.result_path, destination)
             published = True
-            # Persist the plaintext entry before removing the authenticated ciphertext.
             _sync_parent_directory(source_path.parent)
+            _sync_parent_directory(transaction.directory)
+            transaction.set_state("published")
             try:
                 latest = source_path.lstat()
                 if (latest.st_dev, latest.st_ino) != (source_info.st_dev, source_info.st_ino):
@@ -387,20 +394,14 @@ class _FileOperations:
                 if isinstance(exc, AtomicOperationError):
                     raise
                 raise AtomicOperationError("plaintext was published but ciphertext removal failed") from exc
-            try:
-                _sync_parent_directory(source_path.parent)
-            except AtomicOperationError as exc:
-                raise AtomicOperationError(
-                    "ciphertext was removed, but the namespace update could not be synchronized"
-                ) from exc
+            _sync_parent_directory(source_path.parent)
+            transaction.set_state("source_removed")
+            transaction.set_state("complete")
+            transaction.finish()
         finally:
-            if not output.closed:
+            if output is not None and not output.closed:
                 output.close()
-            if not published:
-                try:
-                    temporary.unlink(missing_ok=True)
-                except OSError:
-                    pass
+            # Unpublished output is retained for explicit inspection.
 
 
 class _DirectoryOperations:
@@ -418,8 +419,17 @@ class _DirectoryOperations:
             _component_limit(source.parent),
         )
         _validate_component(destination_name, source.parent)
-        _publish_noreplace(source, source.with_name(destination_name))
+        destination = source.with_name(destination_name)
+        source_info = source.lstat()
+        transaction = Transaction.begin(
+            source.parent, "dir_encrypt", source.name, destination.name, source_info
+        )
+        _publish_noreplace(source, destination)
         _sync_parent_directory(source.parent)
+        transaction.set_state("published")
+        transaction.set_state("source_removed")
+        transaction.set_state("complete")
+        transaction.finish()
 
     def decrypt(self, path: str | os.PathLike[str]) -> None:
         self._manager._require_open()
@@ -432,8 +442,17 @@ class _DirectoryOperations:
             max_component_bytes=_component_limit(source.parent),
         )
         _validate_component(destination_name, source.parent)
-        _publish_noreplace(source, source.with_name(destination_name))
+        destination = source.with_name(destination_name)
+        source_info = source.lstat()
+        transaction = Transaction.begin(
+            source.parent, "dir_decrypt", source.name, destination.name, source_info
+        )
+        _publish_noreplace(source, destination)
         _sync_parent_directory(source.parent)
+        transaction.set_state("published")
+        transaction.set_state("source_removed")
+        transaction.set_state("complete")
+        transaction.finish()
 
 
 def encrypt_name_fn(name: str, primitive, profile: NameProfile, limit: int) -> str:
