@@ -12,7 +12,7 @@ Tamaño de segmento objetivo predeterminado: **1 MiB**. Solo se expondrán tama�
 
 Google Tink es el backend seleccionado. La plantilla Python `AES256_GCM_HKDF_1MB` se genera y recupera mediante la API Protobuf de keysets de Tink en la implementación actual. Las pruebas automatizadas validan round-trip y rechazo de alteración/truncamiento en los entornos CI ejecutados. La compatibilidad con sistemas operativos y filesystems objetivo y la integración sobre rutas reales siguen pendientes. No se cambiará silenciosamente a AES-CTR-HMAC.
 
-La estructura propuesta del archivo se documenta en [Formato de archivos](file-format.md): cabecera mínima autenticada como AAD seguida directamente por el flujo Tink. El layout y la política de extensión aún no están cerrados para implementación.
+La estructura implementada del archivo se documenta en [Formato de archivos](file-format.md): cabecera versionada autenticada como AAD seguida por el flujo Tink. La cabecera y sus metadatos se validan antes de iniciar la transformación.
 
 ## Nombres
 
@@ -32,7 +32,7 @@ Argon2id es la KDF seleccionada para proteger el contenedor de claves cuando el 
 
 La implementación utiliza la API low-level de `argon2-cffi` para derivación binaria de longitud fija mediante Argon2id y `cryptography` AES-GCM para el payload acotado del contenedor. La integración productiva del contenedor MasterKey y su validación automatizada están implementadas. Los resultados CI no sustituyen una auditoría criptográfica ni validan por sí mismos la matriz completa de sistemas operativos y filesystems.
 
-La contraseña es necesaria al inicializar Crypto con un contenedor protegido. La contraseña no se almacena. `Crypto.generate(password=...)` es alias de `Crypto.derive(text=...)`. `Crypto.generate()` sin contraseña genera un contenedor aleatorio no protegido por contraseña.
+La contraseña es necesaria al inicializar `Manager` con un contenedor protegido. La contraseña no se almacena. `fscryptography.generate(password=...)` genera un contenedor protegido; `fscryptography.generate()` sin contraseña genera un contenedor aleatorio no protegido por contraseña.
 
 Perfil Argon2id aprobado para MasterKey v1: versión 19, memoria 65.536 KiB, 3 iteraciones, paralelismo 1, salt de 16 bytes y salida de 32 bytes. El parser rechaza cualquier parámetro distinto antes de ejecutar la KDF. Los límites de entrada y contraseña se detallan en [la política Argon2id](argon2id-policy.md).
 
