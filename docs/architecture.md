@@ -27,9 +27,10 @@ La primera versión utiliza un único backend criptográfico; no se diseña una 
 ## Estado de componentes
 
 - **Implementado:** validación y codec de nombres Tink; generación/apertura de MasterKey; recuperación de keysets; API `generate()`/`Manager`; cambio y exportación de clave; formato binario de archivo v1.0; cifrado/descifrado de archivos con Tink Streaming AEAD; cifrado/descifrado de nombres de archivos y directorios; temporales privados; publicación no-replace; sincronización del archivo temporal y del directorio padre en GNU/Linux.
-- **Diseño especificado, implementación pendiente:** protocolo de journal por transacción, formato estricto, estados persistentes, validación de identidades y recuperación inicial de solo lectura.
+- **Implementado:** journal persistente por transacción, formato estricto, estados persistentes, validación de identidades e inspección explícita de solo lectura.
+- **Pendiente:** resolución o limpieza explícita de transacciones, política de retención, robustecimiento frente a fallos inyectados y validación integral de filesystem.
 - **Pendiente de validación de plataforma:** comportamiento real en NTFS y ext4, límites Unicode exactos en Windows, colisiones bajo configuraciones case-sensitive y garantías de durabilidad.
-- **Pendiente de robustecimiento:** integración del journal en operaciones, API tipada de inspección, resolución explícita de transacciones, flush de directorio en Windows, pruebas de concurrencia/cambios hostiles y preservación de metadatos de filesystem.
+- **Pendiente de robustecimiento:** resolución explícita de transacciones, flush de directorio en Windows, pruebas de concurrencia/cambios hostiles y preservación de metadatos de filesystem.
 
 ## Flujo de cifrado implementado
 
@@ -41,6 +42,6 @@ Reconocer y validar la cabecera; preparar temporal privado; descifrar y autentic
 
 ## Recuperación y límites
 
-No existe todavía journal persistente ni recuperación automática de operaciones interrumpidas abruptamente. Los temporales huérfanos no se eliminan automáticamente. Si la publicación se completó pero el origen no pudo retirarse, ambos recursos se conservan y se informa `AtomicOperationError`.
+El journal persistente registra las etapas de las operaciones y `Manager.inspect_recovery()` permite inspeccionar su estado sin modificar recursos. No existe recuperación automática ni resolución destructiva de operaciones interrumpidas abruptamente. Los temporales huérfanos no se eliminan automáticamente. Si la publicación se completó pero el origen no pudo retirarse, ambos recursos se conservan y se informa `AtomicOperationError`.
 
-El protocolo propuesto está en `docs/recovery-journal.md`. La primera implementación será de inspección explícita y no mutará el filesystem. No implementar primitivas propias. No publicar plaintext parcial. No sobrescribir destinos por defecto. No asumir que múltiples renames forman una transacción. No prometer borrado seguro absoluto de secretos en memoria Python.
+El contrato del journal está en `docs/recovery-journal.md`. La inspección implementada es explícita y de solo lectura; no muta el filesystem. No implementar primitivas propias. No publicar plaintext parcial. No sobrescribir destinos por defecto. No asumir que múltiples renames forman una transacción. No prometer borrado seguro absoluto de secretos en memoria Python.
