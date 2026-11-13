@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .errors import NameConstraintError
 from .names import NameProfile, validate_name
 
 _PREFIX = ".fscryptography-txn-"
@@ -290,7 +291,7 @@ def inspect(parent: str | os.PathLike[str]) -> tuple[RecoveryRecord, ...]:
                     classification = "source_removed" if data["state"] in {"source_removed", "complete"} else "published_source_missing"
             else:
                 if source_kind == "regular" and source_id == expected_source and dest_kind == "missing" and temp_kind == "missing":
-                    classification = "prepared_no_output"
+                    classification = "prepared_no_output" if data["state"] == "prepared" else "ambiguous"
                 elif source_kind == "regular" and source_id == expected_source and dest_kind == "missing" and temp_kind == "regular":
                     classification = "result_ready" if expected_result is not None and temp_id == expected_result else "result_incomplete_or_unverified"
                 elif dest_kind == "regular" and expected_result is not None and dest_id == expected_result and source_kind == "regular" and source_id == expected_source:
