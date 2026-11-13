@@ -131,24 +131,40 @@ def _sync_directory(path: Path) -> None:
 class Transaction:
     """Internal writer for one transaction directory."""
 
-    def __init__(self, parent: Path, directory: Path, data: dict[str, Any]):
+    def __init__(self, parent: Path, directory: Path, data: dict[str, Any], *, parent_fd: int | None = None):
         self.parent = parent
         self.directory = directory
         self.data = data
+        self.parent_fd = os.dup(parent_fd) if parent_fd is not None else None
+        self.directory_fd: int | None = None
+        if self.parent_fd is not None:
+            self.directory_fd = os.open(
+                directory.name,
+                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=self.parent_fd,
+            )
+        self._io_directory = (
+            Path(f"/proc/self/fd/{self.directory_fd}")
+            if self.directory_fd is not None
+            else directory
+        )
 
     @classmethod
     def begin(cls, parent: Path, operation: str, source_name: str, destination_name: str,
-              source_info: os.stat_result) -> "Transaction":
+              source_info: os.stat_result, *, parent_fd: int | None = None) -> "Transaction":
         if operation not in _OPERATIONS or not _component(source_name) or not _component(destination_name):
             raise ValueError("invalid transaction parameters")
         if source_name == destination_name:
             raise ValueError("source and destination must differ")
-        parent_info = parent.stat()
+        parent_info = os.fstat(parent_fd) if parent_fd is not None else parent.stat()
         for _ in range(8):
             transaction_id = secrets.token_hex(16)
             directory = parent / (_PREFIX + transaction_id)
             try:
-                os.mkdir(directory, 0o700 if os.name != "nt" else 0o777)
+                if parent_fd is not None:
+                    os.mkdir(directory.name, 0o700, dir_fd=parent_fd)
+                else:
+                    os.mkdir(directory, 0o700 if os.name != "nt" else 0o777)
                 break
             except FileExistsError:
                 continue
@@ -167,10 +183,13 @@ class Transaction:
             "result_identity": None,
             "created_ns": __import__("time").time_ns(),
         }
-        transaction = cls(parent, directory, data)
+        transaction = cls(parent, directory, data, parent_fd=parent_fd)
         try:
             transaction._persist()
-            _sync_directory(parent)
+            if parent_fd is not None:
+                os.fsync(parent_fd)
+            else:
+                _sync_directory(parent)
         except Exception:
             # Preserve any directory that may contain a partially durable journal.
             raise
@@ -178,7 +197,36 @@ class Transaction:
 
     @property
     def result_path(self) -> Path:
-        return self.directory / "result"
+        return self._io_directory / "result"
+
+    @property
+    def retained_path(self) -> Path:
+        return self._io_directory / "source"
+
+    def stat_result(self) -> os.stat_result:
+        if self.directory_fd is not None:
+            return os.stat("result", dir_fd=self.directory_fd, follow_symlinks=False)
+        return self.result_path.lstat()
+
+    def rename_result_to(self, parent_fd: int, destination_name: str) -> None:
+        if self.directory_fd is None:
+            raise RuntimeError("transaction is not descriptor-anchored")
+        from ._directory import _renameat2
+        _renameat2(self.directory_fd, "result", parent_fd, destination_name)
+
+    def unlink_retained(self) -> None:
+        if self.directory_fd is not None:
+            os.unlink("source", dir_fd=self.directory_fd)
+        else:
+            self.retained_path.unlink()
+
+    def close(self) -> None:
+        if self.directory_fd is not None:
+            os.close(self.directory_fd)
+            self.directory_fd = None
+        if self.parent_fd is not None:
+            os.close(self.parent_fd)
+            self.parent_fd = None
 
     def set_result_ready(self, result_info: os.stat_result) -> None:
         self.data["result_identity"] = _identity(result_info)
@@ -193,19 +241,33 @@ class Transaction:
 
     def _persist(self) -> None:
         raw = _encode(self.data)
-        temporary = self.directory / (".journal-" + secrets.token_hex(8))
+        temporary_name = ".journal-" + secrets.token_hex(8)
+        temporary = self._io_directory / temporary_name
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-        fd = os.open(temporary, flags, 0o600)
+        if self.directory_fd is not None:
+            fd = os.open(temporary_name, flags, 0o600, dir_fd=self.directory_fd)
+        else:
+            fd = os.open(temporary, flags, 0o600)
         try:
             with os.fdopen(fd, "wb") as stream:
                 stream.write(raw)
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temporary, self.directory / "journal.json")
-            _sync_directory(self.directory)
+            if self.directory_fd is not None:
+                os.replace(
+                    temporary_name, "journal.json",
+                    src_dir_fd=self.directory_fd, dst_dir_fd=self.directory_fd,
+                )
+                os.fsync(self.directory_fd)
+            else:
+                os.replace(temporary, self.directory / "journal.json")
+                _sync_directory(self.directory)
         except Exception:
             try:
-                temporary.unlink(missing_ok=True)
+                if self.directory_fd is not None:
+                    os.unlink(temporary_name, dir_fd=self.directory_fd)
+                else:
+                    temporary.unlink(missing_ok=True)
             except OSError:
                 pass
             raise
