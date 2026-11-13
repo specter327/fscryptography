@@ -73,11 +73,6 @@ class Manager:
                 raise ClosedInstanceError("Manager is closed")
             self._context = (key_bytes, material)
 
-    def inspect_recovery(self, parent):
-        """Return immutable, read-only diagnostics for transactions under parent."""
-        from ._journal import inspect
-        return inspect(parent)
-
     def export_key(self) -> str:
         """Return the current MasterKey container as canonical Base64 text."""
         with self._state_lock:
