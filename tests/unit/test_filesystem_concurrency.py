@@ -150,3 +150,30 @@ def test_decrypt_rejects_in_place_ciphertext_mutation_during_streaming(
     assert encrypted.read_bytes() != original_ciphertext
     assert not source.exists()
     assert not (tmp_path / "ciphertext.bin").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="descriptor-relative publication is GNU/Linux-only")
+def test_destination_created_at_publication_is_never_overwritten(
+    manager, tmp_path, monkeypatch
+):
+    source = tmp_path / "publication-race.bin"
+    source.write_bytes(b"source must survive")
+    destination = tmp_path / "publication-race.fscrypt"
+    existing_payload = b"concurrent destination owner"
+    rename_result = fscryptography._filesystem.Transaction.rename_result_to
+
+    def create_destination_before_publish(transaction, parent_fd, destination_name):
+        destination.write_bytes(existing_payload)
+        return rename_result(transaction, parent_fd, destination_name)
+
+    monkeypatch.setattr(
+        fscryptography._filesystem.Transaction,
+        "rename_result_to",
+        create_destination_before_publish,
+    )
+
+    with pytest.raises(fscryptography.DestinationConflictError):
+        manager.file.encrypt(source)
+
+    assert source.read_bytes() == b"source must survive"
+    assert destination.read_bytes() == existing_payload
