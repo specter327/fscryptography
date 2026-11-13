@@ -493,9 +493,7 @@ def _retire_source(
 ) -> None:
     """Move the expected source into private temporary sibling storage before unlinking.
 
-    The quarantine entry is deliberately inside the journaled transaction
-    directory, so an interrupted retirement remains visible to recovery
-    inspection. The identity check is performed after the atomic rename.
+    The source is staged under a random sibling name. The identity check is performed after the atomic rename; abrupt termination can leave that sibling behind.
     """
     if anchor is None:
         # Windows has no Python-level unlink-if-this-file-identity primitive.
