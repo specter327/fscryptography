@@ -43,18 +43,18 @@ Si en el futuro se necesita admitir otros costes por motivos de compatibilidad o
 
 ## Límites de entrada previos a KDF
 
-| Elemento | Límite propuesto | Validación |
+| Elemento | Límite normativo v1 | Validación |
 |---|---:|---|
-| Contenedor binario | 131.149 bytes | Antes de parsear campos variables |
-| Texto Base64 | 174.868 caracteres ASCII | Antes de decodificar |
-| Contraseña UTF-8 | 1.024 bytes | Antes de ejecutar Argon2id |
+| Contenedor binario | 131.149 bytes máximo | Antes de parsear campos variables |
+| Texto Base64 | 174.868 caracteres ASCII máximo | Antes de decodificar |
+| Contraseña UTF-8 | 1.024 bytes máximo; no vacía | Antes de ejecutar Argon2id |
 | Salt | Exactamente 16 bytes | Parser estructural |
 | Nonce AES-GCM | Exactamente 12 bytes | Parser estructural |
 | Tag AES-GCM | Exactamente 16 bytes | AEAD / longitud mínima |
 
 El máximo binario deriva del modo protegido: cabecera de 61 bytes + payload lógico máximo de 131.072 bytes + tag GCM de 16 bytes. El máximo Base64 corresponde a la codificación estándar con padding de ese tamaño binario máximo.
 
-La entrada Base64 debe validarse estrictamente. No se deben ignorar caracteres ajenos al alfabeto Base64, espacios, saltos de línea ni padding incorrecto. No se debe decodificar una entrada arbitrariamente grande para comprobar su tamaño después.
+Estos límites quedan aprobados como parte del contrato normativo de MasterKey v1. No son valores configurables por el consumidor ni límites sugeridos. La entrada Base64 debe validarse estrictamente. No se deben ignorar caracteres ajenos al alfabeto Base64, espacios, saltos de línea ni padding incorrecto. No se debe decodificar una entrada arbitrariamente grande para comprobar su tamaño después.
 
 La contraseña debe recibirse como texto, codificarse una sola vez con UTF-8 estricto y comprobarse por longitud en bytes. Se rechazan cadenas vacías y entradas que excedan 1.024 bytes. No se aplica normalización Unicode, recorte de espacios ni transformación silenciosa. La contraseña no debe aparecer en excepciones, logs ni diagnósticos.
 
@@ -103,7 +103,7 @@ Debe existir al menos una prueba que confirme que el parser productivo rechaza l
 
 - [x] Ejecutar benchmark repetido del perfil en el equipo de referencia del proyecto.
 - [x] Aprobar Argon2id v19 / 65.536 KiB / 3 / 1 como perfil de producción v1.
-- [ ] Confirmar los límites de entrada y contraseña como parte del cierre del contrato de implementación.
+- [x] Confirmar los límites de entrada y contraseña como parte del contrato normativo de MasterKey v1.
 - [ ] Añadir pruebas del parser productivo que verifiquen rechazo previo a KDF y límites de concurrencia/admisión si se implementa.
 
-El perfil criptográfico está aprobado para v1. Los límites de entrada y contraseña permanecen especificados como propuesta hasta su confirmación contractual; la implementación productiva y sus pruebas siguen pendientes.
+El perfil criptográfico y los límites de entrada de MasterKey v1 están aprobados. La implementación productiva y sus pruebas siguen pendientes.
