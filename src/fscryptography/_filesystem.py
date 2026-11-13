@@ -336,6 +336,8 @@ class _FileOperations:
                     raise
                 raise AtomicOperationError("plaintext was published but ciphertext removal failed") from exc
         finally:
+            if not output.closed:
+                output.close()
             if not published:
                 try:
                     temporary.unlink(missing_ok=True)
