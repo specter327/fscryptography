@@ -64,3 +64,6 @@ jobs:
 
       - name: Validate Argon2id and AES-256-GCM
         run: python tests/backend_validation/test_master_key_protection.py
+
+      - name: Validate MasterKey v1.0 golden vectors
+        run: python tests/master_key_format/test_master_key_format_vectors.py
