@@ -1,29 +1,68 @@
-# Filesystem hardening: source identity and symlink-safe opening
+# Filesystem hardening: source identity and retirement
 
-## Scope of this change
+## Symlink-safe source opening
 
-This change hardens the source-open boundary for file encryption and decryption.
+File encryption and decryption open the inspected source with `O_NOFOLLOW`
+where available, then verify through `fstat()` that the descriptor is a regular
+file and has the device/inode identity captured by the initial `lstat()`.
+This closes the lstat/open symlink substitution window on Linux. Windows keeps
+the descriptor identity check, although its open primitive does not provide the
+same `O_NOFOLLOW` guarantee.
 
-Previously, operations performed an initial `lstat()` and then used `Path.open()`. The descriptor identity was checked after opening, which detected many substitutions, but the open itself could follow a symlink introduced between those operations.
+## Journaled source retirement on GNU/Linux
 
-The new `_open_source()` helper:
+After the encrypted or decrypted result has been published, file operations no
+longer perform a pathname identity check followed by unlinking the original
+entry. Instead they:
 
-- opens the already-inspected path with `O_NOFOLLOW` where the platform provides it;
-- uses binary mode on Windows;
-- verifies the opened descriptor is still a regular file;
-- compares the descriptor's device/inode identity with the initial `lstat()`;
-- closes the descriptor on every failed validation path.
+1. Atomically rename the source into the transaction directory as `source`,
+   using the no-replace rename primitive.
+2. Inspect the moved entry with `lstat()` and compare its device/inode identity
+   with the identity recorded before processing.
+3. If the identity differs, attempt a no-replace restoration to the original
+   basename. The unexpected entry is never unlinked.
+4. If the identity matches, persist the `source_retained` journal state, unlink
+   the retained entry, synchronize the transaction directory, and persist
+   `source_removed`.
 
-Both file encryption and decryption use this helper. A regression test replaces the source pathname with a symlink after capturing the original identity and verifies that the symlink target is not opened.
+The transaction directory is created with mode 0700 on GNU/Linux. A crash after
+the rename but before unlink leaves the original object at
+`.fscryptography-txn-<id>/source`. Read-only recovery inspection recognizes
+that exact identity and reports `source_retained`; it does not delete or restore
+the object. A mismatched retained entry is reported as `ambiguous`.
 
-## Explicit limitations
+This protocol narrows the check-then-unlink window for processes that cannot
+access the private transaction directory. It is not a defense against a
+malicious process running under the same UID, which can access that UID's
+private files and race their names.
 
-This is an incremental hardening step, not a complete TOCTOU solution.
+## Windows limitation
 
-In particular, source removal still uses a pathname-based identity check followed by `unlink()`. A hostile concurrent process may replace the directory entry between those operations. Parent-directory replacement and fully descriptor-relative publication/removal also remain unresolved.
+The transaction directory currently inherits its parent directory's Windows
+ACL. The implementation therefore does not use it as a protected quarantine.
+Windows retains the previous pathname identity-check/removal sequence; the
+check-to-unlink race remains unresolved there. A future Windows-specific change
+must establish and verify a restrictive ACL or use handle-based file operations
+before claiming equivalent source-retirement guarantees.
 
-Do not interpret this change as protection against a process with concurrent write access to the parent directory. The next implementation step must address identity-safe source retirement and parent-directory anchoring, with platform-specific guarantees and race-injection tests.
+## Remaining limitations
+
+- Parent-directory replacement and fully descriptor-relative publication,
+  transaction creation, and source retirement remain unresolved.
+- The GNU/Linux quarantine uses pathname-based rename/unlink operations; it
+  relies on the transaction directory's 0700 permissions against other UIDs.
+- Same-UID hostile concurrency is not prevented.
+- Windows source retirement remains vulnerable to a check-then-unlink race.
+- Directory rename operations are atomic no-replace renames, but do not use the
+  file-source quarantine protocol.
+
+Do not interpret these incremental changes as complete hostile-concurrency
+protection. Recovery inspection remains read-only and no automatic destructive
+recovery or transaction cleanup is performed.
 
 ## Validation
 
-The Linux regression test exercises the `O_NOFOLLOW` behavior. Windows skips that specific symlink-creation test because creating symlinks may require elevated privileges; descriptor identity validation remains active on Windows.
+Regression tests cover Linux symlink substitution, source replacement before
+quarantine, and interruption after a source has been retained. The Windows
+matrix exercises the platform's existing file operations but skips tests that
+require the GNU/Linux private-quarantine protocol.
