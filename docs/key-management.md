@@ -30,7 +30,7 @@ El contenedor contiene keysets independientes para las operaciones criptográfic
 
 `MasterKey` es opaco para el consumidor: no expone keysets, claves derivadas, nonces internos ni detalles del backend. El contenedor de claves es distinto del formato de cada archivo o nombre cifrado.
 
-La estructura lógica y la disposición binaria v1 aprobada se especifican en [Formato de MasterKey](master-key-format.md). Los casos de conformidad previstos están en [Plan de pruebas del formato MasterKey](master-key-format-test-plan.md). El perfil Argon2id v1 está aprobado; los límites de entrada y contraseña aún requieren confirmación contractual antes de implementar.
+La estructura lógica y la disposición binaria v1 aprobada se especifican en [Formato de MasterKey](master-key-format.md). Los casos de conformidad previstos están en [Plan de pruebas del formato MasterKey](master-key-format-test-plan.md). El perfil Argon2id v1 y los límites de entrada y contraseña están aprobados contractualmente. La implementación productiva y sus pruebas siguen pendientes.
 
 ## Generación aleatoria
 
@@ -56,7 +56,7 @@ Los campos de cabecera que controlan la interpretación del contenedor deben aut
 
 `Crypto(master_key=..., password=...)` deriva la clave de protección y abre el contenedor. Una contraseña incorrecta, un contenedor alterado o uno malformado debe producir un error de inicialización; nunca debe generar silenciosamente keysets nuevos.
 
-La contraseña se interpreta como texto UTF-8 estricto, sin normalización Unicode implícita. Los límites de longitud propuestos se especifican en [la política Argon2id](argon2id-policy.md) y deben confirmarse en el contrato de implementación. La contraseña nunca se persiste dentro del contenedor.
+La contraseña se interpreta como texto UTF-8 estricto, sin normalización Unicode implícita, no puede estar vacía y no puede exceder 1.024 bytes una vez codificada. El contenedor binario no puede exceder 131.149 bytes y su representación Base64 no puede exceder 174.868 caracteres ASCII. Los límites completos y el orden obligatorio de validación se definen en [la política Argon2id](argon2id-policy.md). La contraseña nunca se persiste dentro del contenedor.
 
 ## Separación
 
