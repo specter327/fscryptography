@@ -172,13 +172,13 @@ Para cerrar los casos ambiguos se propone el siguiente contrato, sin cambiar tod
 - Una cadena no vacía debe comenzar por exactamente un punto y contener al menos un carácter después de él, por ejemplo `.enc` o `.vault`.
 - No se elimina ni añade el punto automáticamente. Entradas sin punto inicial, compuestas solo por puntos, con separadores de ruta, NUL o caracteres no válidos para el perfil de filesystem se rechazan; nunca se normalizan silenciosamente.
 - La extensión se valida como un sufijo de un único componente y se vuelve a validar el nombre completo resultante contra los límites reales del destino.
-- `new_extension` solo aplica cuando el nombre permanece visible. Si se solicita cifrado del nombre, la extensión completa queda dentro del nombre cifrado y proporcionar `new_extension` distinto de `None` se rechaza.
+- `new_extension` es un parámetro de cifrado y solo aplica cuando el nombre permanece visible. Si se solicita cifrado del nombre, la extensión completa queda dentro del nombre cifrado y proporcionar `new_extension` distinto de `None` se rechaza. El descifrado no acepta `new_extension`: restaura exactamente la extensión original autenticada en la cabecera.
 
 ### Nombre de salida predeterminado propuesto
 
 - Al cifrar con nombre visible y sin `new_extension`, usar `.fscrypt` como extensión de salida, independientemente de la extensión original.
 - La extensión original se conserva en la cabecera autenticada y se restaura al descifrar.
-- Al descifrar, si no se solicita una extensión alternativa, se restaura exactamente la extensión original; si el archivo original no tenía extensión, no se añade ninguna.
+- Al descifrar se restaura siempre exactamente la extensión original autenticada; si el archivo original no tenía extensión, no se añade ninguna.
 - El sufijo `.fscrypt` no es una señal de autenticidad ni sustituye la validación de magic, versión, cabecera y AEAD.
 - Si el nombre se cifra, el nombre completo se transforma mediante el codec de nombres; no se añade `.fscrypt` visible.
 
