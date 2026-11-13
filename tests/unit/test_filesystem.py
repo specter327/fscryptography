@@ -11,6 +11,7 @@ from fscryptography.errors import (
     DestinationConflictError,
     FormatError,
     InvalidPathError,
+    UnsupportedResourceError,
 )
 from fscryptography import _filesystem
 
@@ -401,3 +402,39 @@ def test_directory_replacement_during_rename_is_restored(manager, tmp_path, monk
     assert (retained_original / "original.txt").read_text(encoding="utf-8") == "original"
     assert (source / "replacement.txt").read_text(encoding="utf-8") == "replacement"
     assert not any(path.name.startswith("~1") for path in tmp_path.iterdir())
+
+
+
+def test_file_operations_reject_multiple_hard_links(manager, tmp_path):
+    source = tmp_path / "shared.txt"
+    alias = tmp_path / "shared-alias.txt"
+    source.write_bytes(b"content with another directory entry")
+    try:
+        os.link(source, alias)
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"hard links are unavailable on this filesystem: {exc}")
+
+    assert source.stat().st_ino == alias.stat().st_ino
+    assert source.stat().st_nlink == 2
+
+    with pytest.raises(UnsupportedResourceError, match="multiple hard links"):
+        manager.file.encrypt(source)
+
+    assert source.read_bytes() == b"content with another directory entry"
+    assert alias.read_bytes() == b"content with another directory entry"
+    assert source.stat().st_nlink == 2
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are not the Windows ACL contract")
+def test_encrypted_and_decrypted_files_use_restrictive_mode(manager, tmp_path):
+    source = tmp_path / "private.txt"
+    source.write_bytes(b"private payload")
+    source.chmod(0o644)
+
+    manager.file.encrypt(source)
+    encrypted = tmp_path / "private.fscrypt"
+    assert encrypted.stat().st_mode & 0o777 == 0o600
+
+    manager.file.decrypt(encrypted)
+    assert source.stat().st_mode & 0o777 == 0o600
+    assert source.read_bytes() == b"private payload"
