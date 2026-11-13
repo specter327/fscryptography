@@ -22,6 +22,15 @@ AAD = b"fscryptography/backend-validation/v1"
 PROFILE_NAME = "AES256_GCM_HKDF_1MB"
 
 
+class NonClosingBytesIO(io.BytesIO):
+    """BytesIO whose contents remain accessible after Tink closes its stream."""
+
+    def close(self):
+        # Tink finalizes the streaming AEAD wrapper by closing it. Preserve the
+        # in-memory buffer so this probe can inspect the resulting bytes.
+        self.flush()
+
+
 def package_version(name: str) -> str:
     try:
         return version(name)
@@ -59,14 +68,14 @@ def make_primitive_from_serialized_keyset():
 
 
 def encrypt(primitive, plaintext: bytes, aad: bytes = AAD) -> bytes:
-    destination = io.BytesIO()
+    destination = NonClosingBytesIO()
     with primitive.new_encrypting_stream(destination, aad) as stream:
         stream.write(plaintext)
     return destination.getvalue()
 
 
 def decrypt(primitive, ciphertext: bytes, aad: bytes = AAD) -> bytes:
-    source = io.BytesIO(ciphertext)
+    source = NonClosingBytesIO(ciphertext)
     with primitive.new_decrypting_stream(source, aad) as stream:
         return stream.read()
 
@@ -85,8 +94,8 @@ class StreamingAeadBackendValidation(unittest.TestCase):
 
     def test_keyset_serialization_and_recovery(self):
         self.assertTrue(self.serialized_keyset)
-        # setUpClass already parsed the serialized keyset and constructed the
-        # primitive from the recovered handle. Successful setup proves both.
+        # setUpClass parsed the serialized keyset and built the primitive from
+        # the recovered handle. Successful setup proves both operations.
 
     def test_round_trip_empty_small_and_multi_segment_payloads(self):
         payloads = (
