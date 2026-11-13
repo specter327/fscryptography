@@ -495,6 +495,7 @@ class _FileOperations:
         try:
             output = os.fdopen(transaction.open_result(), "wb")
             with (_open_source_at(anchor, source_path.name, source_info) if anchor is not None else _open_source(source_path, source_info)) as original:
+                opened_info = os.fstat(original.fileno())
                 output.write(header)
                 _copy_encrypt(
                     self._manager._content_primitive,
@@ -502,7 +503,7 @@ class _FileOperations:
                     output,
                     header,
                 )
-                _assert_source_unchanged(original, source_info)
+                _assert_source_unchanged(original, opened_info)
                 _sync_close(output)
             transaction.set_result_ready(transaction.stat_result())
             if anchor is not None:
@@ -549,6 +550,7 @@ class _FileOperations:
         published = False
         try:
             with (_open_source_at(anchor, source_path.name, source_info) if anchor is not None else _open_source(source_path, source_info)) as encrypted:
+                opened_info = os.fstat(encrypted.fileno())
                 header = _read_header(encrypted)
                 if header.encrypted_name:
                     destination_name = decrypt_name(
@@ -582,7 +584,7 @@ class _FileOperations:
                     output,
                     header.raw,
                 )
-                _assert_source_unchanged(encrypted, source_info)
+                _assert_source_unchanged(encrypted, opened_info)
                 _sync_close(output)
             transaction.set_result_ready(transaction.stat_result())
             if anchor is not None:
