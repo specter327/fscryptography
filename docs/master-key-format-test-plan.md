@@ -95,12 +95,12 @@ La fase de especificación del formato se considera cerrada cuando:
 2. [x] Se ejecuta el benchmark de referencia y se aprueba el perfil Argon2id v1 (64 MiB / 3 / p=1), junto con los límites normativos de entrada y contraseña de [la política de Argon2id](argon2id-policy.md).
 3. [~] Se valida el perfil AEAD de nombres Tink `AES256_GCM` y el tipo `Aead`; se aprobaron `~1` + Base64URL sin padding y el límite de 156 bytes UTF-8 para componentes de 255 bytes. La validación sobre filesystems objetivo sigue pendiente.
 4. [~] Se publican vectores golden iniciales de estructura y envoltura; faltan vectores de keysets Tink válidos e inválidos.
-5. [ ] Se acuerda el catálogo de errores de parsing/autenticación.
-6. [ ] Se define la matriz de plataformas para ejecutar la conformidad.
+5. [x] Se acuerda el catálogo de errores de parsing/autenticación en docs/errors.md.
+6. [x] Se define la matriz de plataformas objetivo en docs/platform-compatibility.md.
 
 La política de producción aprobada para v1 utiliza Argon2id v19 con 64 MiB, 3 iteraciones y paralelismo 1; exige aceptación estricta del perfil antes de ejecutar la KDF. Los valores de fixtures de bajo coste no deben ser aceptados por el parser productivo. Los límites de entrada y contraseña están aprobados contractualmente; véase [Política de Argon2id y límites de apertura](argon2id-policy.md).
 
-El parser/generador productivo MasterKey v1.0 está implementado. La fachada pública `Crypto` y las operaciones funcionales de archivos/directorios permanecen pendientes.
+El parser/generador productivo MasterKey v1.0 y la fachada pública `Crypto` están implementados. Las operaciones funcionales de archivos/directorios permanecen pendientes; el formato de archivo continúa en propuesta hasta cerrar la semántica de extensión y el contrato de `new_extension`.
 
 
 ## Estado de ejecución
