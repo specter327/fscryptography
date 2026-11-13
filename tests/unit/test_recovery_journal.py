@@ -97,7 +97,10 @@ def test_symlink_journal_is_never_followed(tmp_path):
     journal.unlink()
     target = tmp_path / "outside.json"
     target.write_text("{}", encoding="utf-8")
-    journal.symlink_to(target)
+    try:
+        journal.symlink_to(target)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
 
     record = inspect(tmp_path)[0]
 
