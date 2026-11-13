@@ -66,7 +66,7 @@ Los keysets de contenido y nombres son independientes. No se reutiliza directame
 
 El módulo interno `fscryptography._master_key` implementa la generación y apertura del contenedor binario v1.0, incluidos los dos keysets Tink reales, el framing, Base64 estricto, Argon2id con el perfil productivo aprobado y AES-256-GCM con la cabecera completa como AAD. La apertura recupera las primitivas Tink de Streaming AEAD y AEAD de nombres; los keysets no se exponen como parte de la API pública.
 
-La integración del codec de nombres con el keyset recuperado está cubierta por pruebas unitarias. La fachada pública `Crypto`, su ciclo de vida (`close()` y context manager) y las operaciones sobre archivos/directorios todavía no están implementados. Esta etapa no declara soporte de filesystem ni estabilidad de API.
+La integración del codec de nombres con el keyset recuperado está cubierta por pruebas unitarias. La fachada pública `Crypto` ya implementa generación, derivación, inicialización y ciclo de vida (`close()` y context manager). Las operaciones sobre archivos/directorios todavía no están implementadas. Esta etapa no declara soporte de filesystem ni estabilidad de API.
 
 ## Responsabilidad del consumidor
 
