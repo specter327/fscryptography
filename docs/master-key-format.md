@@ -98,7 +98,30 @@ El payload es el resultado de AES-256-GCM aplicado al payload lógico:
 - El resultado de AES-GCM incluye el tag de autenticación de 16 bytes.
 - `payload_length` incluye ciphertext y tag.
 
-La contraseña no se almacena. La API recibe texto y su codificación binaria es UTF-8 estricto, sin normalización Unicode implícita. La política normativa de Argon2id, el límite de contraseña y los límites de entrada están especificados en [Política de Argon2id y límites de apertura](argon2id-policy.md). El parser debe validar el perfil admitido y todos los límites antes de ejecutar la KDF.
+La contraseña no se almacena. La API recibe texto y su codificación es UTF-8 estricto, sin normalización Unicode implícita. La política normativa de Argon2id y los límites de entrada están definidos en [Política de Argon2id y límites de apertura](argon2id-policy.md).
+
+## Límites normativos de MasterKey v1
+
+Los siguientes límites están aprobados y forman parte del contrato de parsing:
+
+| Elemento | Límite |
+|---|---:|
+| Contenedor binario completo | 131.149 bytes máximo |
+| Representación Base64 estándar con padding | 174.868 caracteres ASCII máximo |
+| Contraseña | 1–1.024 bytes UTF-8 |
+| Salt Argon2id | Exactamente 16 bytes |
+| Nonce AES-256-GCM | Exactamente 12 bytes |
+| Tag AES-256-GCM | Exactamente 16 bytes |
+| Keyset serializado individual | 32 KiB máximo |
+| Payload lógico | 128 KiB máximo |
+
+El máximo binario se deriva del contenedor protegido: cabecera de 61 bytes + payload lógico máximo de 131.072 bytes + tag GCM de 16 bytes. El máximo Base64 corresponde a la codificación estándar con padding de ese tamaño binario.
+
+Base64 se acepta estrictamente: se rechazan whitespace, saltos de línea, caracteres ajenos al alfabeto, padding incorrecto y cualquier representación no canónica. El límite se verifica antes de decodificar.
+
+La contraseña se recibe como texto, se codifica con UTF-8 estricto y se valida por longitud en bytes. Se rechaza la cadena vacía y cualquier contraseña superior a 1.024 bytes. No se aplica normalización Unicode, trim ni transformación silenciosa. La contraseña nunca se registra ni se incluye en errores.
+
+Los parámetros Argon2id productivos aceptados son exclusivamente versión 19, memoria 65.536 KiB, time_cost 3 y parallelism 1. Cualquier otra combinación se rechaza antes de ejecutar la KDF. Véase [Política de Argon2id](argon2id-policy.md).
 
 ## Reglas de parsing
 
@@ -122,7 +145,7 @@ Cualquier fallo invalida el contenedor completo. Nunca se devuelve un keyset par
 - Modo, schema, identificador KDF/AEAD o flags desconocidos.
 - Longitudes incoherentes, fuera de límites o que no coincidan con el tamaño real.
 - Cabecera de tamaño inesperado, extensiones o bytes finales no definidos.
-- Parámetros Argon2id fuera del perfil permitido, antes de ejecutar la KDF.
+- Base64 no canónico, whitespace, padding incorrecto o tamaño excedido.\n- Contraseña vacía, UTF-8 inválido o superior a 1.024 bytes.\n- Parámetros Argon2id fuera del perfil permitido, antes de ejecutar la KDF.
 - Contraseña incorrecta, nonce/AAD/ciphertext/tag alterados.
 - Payload interno truncado, longitudes cero, longitudes fuera de límites o bytes sobrantes.
 - Protobuf malformado, keysets vacíos o keysets de tipo inesperado.
