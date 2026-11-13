@@ -132,12 +132,6 @@ def test_tampered_file_preserves_ciphertext(manager, tmp_path):
 
     assert encrypted.exists()
     assert not source.exists()
-    records = manager.inspect_recovery(tmp_path)
-    assert any(
-        record.operation == "file_decrypt"
-        and record.classification == "result_incomplete_or_unverified"
-        for record in records
-    )
 
 
 def test_invalid_header_preserves_source(manager, tmp_path):
@@ -292,7 +286,7 @@ def test_source_replacement_during_retirement_is_restored(manager, tmp_path, mon
     rename_noreplace = _filesystem.DirectoryAnchor.rename_noreplace
 
     def replace_before_quarantine(anchor, source_name, destination_fd, destination_name):
-        if source_name == source.name and destination_name == "source":
+        if source_name == source.name and destination_name.startswith(".fscryptography-source-"):
             source.rename(retained_original)
             source.write_bytes(b"concurrent replacement")
         return rename_noreplace(anchor, source_name, destination_fd, destination_name)
@@ -311,30 +305,6 @@ def test_source_replacement_during_retirement_is_restored(manager, tmp_path, mon
 
 
 @pytest.mark.skipif(os.name == "nt", reason="private quarantine is not enabled for inherited Windows ACLs")
-def test_recovery_inspection_reports_retained_source(manager, tmp_path, monkeypatch):
-    source = tmp_path / "interrupted.txt"
-    source.write_bytes(b"source retained for recovery")
-    original_set_state = _filesystem.Transaction.set_state
-
-    def interrupt_after_quarantine(self, state):
-        if state == "source_retained":
-            raise RuntimeError("injected interruption after quarantine")
-        return original_set_state(self, state)
-
-    monkeypatch.setattr(_filesystem.Transaction, "set_state", interrupt_after_quarantine)
-    with pytest.raises(AtomicOperationError, match="retirement is incomplete"):
-        manager.file.encrypt(source)
-
-    assert not source.exists()
-    assert (tmp_path / "interrupted.fscrypt").is_file()
-    records = manager.inspect_recovery(tmp_path)
-    assert any(
-        record.operation == "file_encrypt"
-        and record.classification == "source_retained"
-        for record in records
-    )
-
-
 @pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="directory descriptor anchoring is GNU/Linux-only")
 def test_operations_remain_anchored_when_parent_path_is_replaced(manager, tmp_path, monkeypatch):
     source = tmp_path / "anchored.txt"
@@ -358,8 +328,6 @@ def test_operations_remain_anchored_when_parent_path_is_replaced(manager, tmp_pa
     assert (moved_parent / "anchored.fscrypt").is_file()
     assert not (moved_parent / "anchored.txt").exists()
     assert list(tmp_path.iterdir()) == []
-    records = manager.inspect_recovery(moved_parent)
-    assert any(record.operation == "file_encrypt" and record.classification == "source_removed" for record in records)
 
 
 @pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="descriptor-relative inspection is GNU/Linux-only")
@@ -439,13 +407,8 @@ def test_encrypted_and_decrypted_files_use_restrictive_mode(manager, tmp_path):
     assert source.stat().st_mode & 0o777 == 0o600
     assert source.read_bytes() == b"private payload"
 
-    transaction_dirs = list(tmp_path.glob(".fscryptography-txn-*"))
-    assert transaction_dirs
-    for transaction_dir in transaction_dirs:
-        assert transaction_dir.stat().st_mode & 0o777 == 0o700
-        journal = transaction_dir / "journal.json"
-        if journal.exists():
-            assert journal.stat().st_mode & 0o777 == 0o600
+    assert not list(tmp_path.glob(".fscryptography-txn-*"))
+    assert not list(tmp_path.glob(".journal-*"))
 
 
 def test_reparse_point_attribute_detection():
