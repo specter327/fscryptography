@@ -57,9 +57,11 @@ Manager.close() invalida la instancia y libera referencias a los bytes de la cla
 
 ## Estado de implementación
 
-El módulo interno fscryptography._master_key implementa la generación y apertura del contenedor binario v1.0, incluidos los dos keysets Tink reales, framing, Base64 estricto, Argon2id con el perfil aprobado y AES-256-GCM con la cabecera completa como AAD.
+El módulo interno `fscryptography._master_key` implementa la generación y apertura del contenedor binario v1.0, incluidos los dos keysets Tink, framing, Base64 estricto, Argon2id con el perfil aprobado y AES-256-GCM para proteger el contenedor.
 
-La API pública implementa fscryptography.generate(), Manager, cambio de clave, exportación Base64 y ciclo de vida. Las operaciones sobre archivos/directorios todavía no están implementadas; tampoco existe aún publicación atómica de recursos sobre el filesystem.
+La API pública implementa `fscryptography.generate()`, `Manager`, cambio de clave, exportación Base64 y ciclo de vida. Las operaciones de archivo y directorio están integradas con las primitivas criptográficas y el filesystem: cifrado/descifrado segmentado de archivos, transformación de nombres, temporales transaccionales, publicación sin reemplazo y journal persistente con inspección de solo lectura.
+
+La validación integral de las garantías de filesystem sigue pendiente en la matriz de plataformas objetivo. La implementación no implica que NTFS, ext4, todas las configuraciones de Windows o GNU/Linux hayan superado pruebas exhaustivas.
 
 ## Responsabilidad del consumidor
 

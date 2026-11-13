@@ -1,6 +1,6 @@
 # Documentación de fscryptography
 
-Referencia técnica de la librería. El README es una presentación breve; las decisiones normativas y contratos viven aquí.
+Referencia técnica de la librería. El README contiene la presentación del proyecto y el manual práctico de API; las decisiones normativas y contratos técnicos viven en esta documentación.
 
 ## Documentos
 - [Alcance](scope.md)
