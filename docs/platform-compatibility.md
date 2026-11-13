@@ -14,9 +14,9 @@ La librería no debe inferir compatibilidad por el mero hecho de que Python o un
 
 | Dimensión | Objetivo inicial | Estado |
 |---|---|---|
-| Sistema operativo | Windows 11 x86-64 | Objetivo; falta validación integral |
-| Sistema operativo | Ubuntu 22.04 LTS x86-64 | Objetivo; falta validación integral |
-| Sistema operativo | Ubuntu 24.04 LTS x86-64 | Objetivo; falta validación integral |
+| Sistema operativo | Windows 11 x86-64 | Objetivo; GitHub Actions Windows no equivale a un cliente Windows 11, falta validación específica del cliente |
+| Sistema operativo | Ubuntu 22.04 LTS x86-64 | Objetivo; matriz de integración CI dedicada |
+| Sistema operativo | Ubuntu 24.04 LTS x86-64 | Objetivo; matriz de integración CI dedicada |
 | Python | CPython 3.11 | Objetivo; backend criptográfico validado en Ubuntu |
 | Python | CPython 3.12 | Objetivo; backend criptográfico validado en Ubuntu |
 | Python | CPython 3.13 | Objetivo; backend criptográfico validado en Ubuntu |
@@ -38,7 +38,7 @@ No se debe ampliar esta matriz por analogía. Cada nueva combinación requiere p
 
 ## Evidencia de validación existente
 
-El workflow [backend-validation.yml](../.github/workflows/backend-validation.yml) ejecutó pruebas de backend en GitHub Actions sobre Ubuntu para Python 3.10, 3.11, 3.12 y 3.13:
+El workflow [backend-validation.yml](../.github/workflows/backend-validation.yml) ejecuta pruebas de backend en GitHub Actions sobre Ubuntu para Python 3.10, 3.11, 3.12 y 3.13. El workflow [real-filesystem-integration.yml](../.github/workflows/real-filesystem-integration.yml) ejecuta integración sobre `ubuntu-22.04`, `ubuntu-24.04` y `windows-latest`, con Python 3.11–3.13.
 
 - Tink Streaming AEAD con `AES256_GCM_HKDF_1MB`.
 - Tink AEAD convencional `AES256_GCM` para nombres.
@@ -121,7 +121,7 @@ Cada combinación objetivo de sistema operativo, Python y filesystem debe cubrir
 11. Temporales huérfanos y fallos de rollback/recuperación.
 12. Límites de ruta y componente reales del filesystem probado.
 
-Los resultados deben registrar OS/build, arquitectura, versión exacta de Python, versión de dependencias, filesystem y opciones relevantes de montaje/configuración. Un resultado de una combinación no se extrapola a otra.
+Los resultados de `real-filesystem-integration.yml` registran OS/build, arquitectura, versión exacta de Python, versiones de fscryptography/Tink/argon2-cffi/cryptography/pytest y filesystem con opciones relevantes de montaje. El runner Windows de GitHub es evidencia de comportamiento NTFS en ese entorno, no una prueba equivalente a Windows 11 cliente. Un resultado de una combinación no se extrapola a otra.
 
 ## Dependencias y empaquetado
 
@@ -141,7 +141,7 @@ Antes de publicar soporte v1 se debe:
 - [x] Separar evidencia de backend criptográfico de validación integral de filesystem.
 - [x] Definir contrato de nombres reservados Windows, UTF-8 estricto y semántica de equivalencia/casefold por filesystem.
 - [x] Configurar CI de backend criptográfico en Windows para CPython 3.11–3.13 (pendiente de una ejecución verde antes de considerar validado el entorno).
-- [ ] Ejecutar pruebas integrales de filesystem en NTFS y ext4.
+- [ ] Ejecutar pruebas integrales de filesystem en NTFS y ext4 y confirmar el tipo real del volumen en los logs de CI.
 - [x] Medir nombres GNU/Linux en bytes UTF-8 y nombres Windows en unidades UTF-16; probar round-trip Unicode en la matriz de filesystem.
 - [x] Definir el contrato `str`/`os.PathLike[str]` y rechazar `PathLike[bytes]`.
 - [x] Añadir round-trip de filesystem con rutas largas, incluida una ruta Windows superior a MAX_PATH cuando el runner la soporta.
