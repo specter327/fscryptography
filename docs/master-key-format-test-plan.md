@@ -75,11 +75,11 @@ Los fixtures criptográficos deben ser reproducibles. La generación aleatoria d
 - Confirmar que una apertura fallida no entrega el primer keyset si falla el segundo.
 - No usar un formato de keyset propio ni exponer keysets a la API pública.
 
-El perfil Tink `AES256_GCM` y el keyset `Aead` ya pasaron la prueba de backend en CI. La matriz de integración del contenedor sigue pendiente hasta probar ambos keysets reales dentro del MasterKey.
+El perfil Tink `AES256_GCM` y el keyset `Aead` ya pasaron la prueba de backend en CI. La integración productiva genera y restaura ambos keysets Tink dentro del MasterKey; las pruebas unitarias verifican la recuperación y el uso del primitive AEAD de nombres. La ampliación de vectores golden y pruebas adversariales sigue pendiente.
 
 ## Propiedades y fuzzing
 
-Una vez exista el parser, ejecutar pruebas generativas/fuzzing para:
+Ejecutar pruebas generativas/fuzzing sobre el parser productivo para:
 - Cualquier secuencia de bytes arbitraria: nunca provocar crash del proceso, bucle no acotado ni asignación desproporcionada.
 - Cualquier longitud declarada: no leer fuera de límites ni reservar memoria antes de validar.
 - Cualquier campo desconocido: rechazo determinista.
@@ -100,9 +100,9 @@ La fase de especificación del formato se considera cerrada cuando:
 
 La política de producción aprobada para v1 utiliza Argon2id v19 con 64 MiB, 3 iteraciones y paralelismo 1; exige aceptación estricta del perfil antes de ejecutar la KDF. Los valores de fixtures de bajo coste no deben ser aceptados por el parser productivo. Los límites de entrada y contraseña están aprobados contractualmente; véase [Política de Argon2id y límites de apertura](argon2id-policy.md).
 
-La implementación funcional de archivos y directorios permanece bloqueada hasta completar esta fase.
+El parser/generador productivo MasterKey v1.0 está implementado. La fachada pública `Crypto` y las operaciones funcionales de archivos/directorios permanecen pendientes.
 
 
 ## Estado de ejecución
 
-Las pruebas de `tests/master_key_format/test_master_key_format_vectors.py` validan el layout aprobado mediante un verificador exclusivo de pruebas. No constituyen el parser productivo ni validan la semántica de keysets Tink. El vector protegido usa Argon2id con coste deliberadamente bajo para que la prueba sea rápida; nunca debe reutilizarse en producción.
+Las pruebas de `tests/master_key_format/test_master_key_format_vectors.py` siguen validando el layout aprobado mediante un verificador exclusivo de pruebas. El parser productivo se encuentra en `src/fscryptography/_master_key.py` y genera/restaura keysets Tink reales. El vector protegido sintético usa Argon2id con coste deliberadamente bajo para que la prueba sea rápida; nunca debe reutilizarse en producción.
