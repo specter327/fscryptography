@@ -678,7 +678,7 @@ class _FileOperations:
                 raise ValueError("encrypted destination must differ from the source path")
 
             transaction = Transaction.begin(
-                source_path.parent, "file_encrypt", source_path.name, destination.name, source_info,
+                source_path.parent, "file_encrypt", source_path.name, destination.name,
                 parent_fd=anchor.fd if anchor is not None else None,
             )
 
@@ -769,7 +769,7 @@ class _FileOperations:
                 if destination == source_path:
                     raise ValueError("decrypted destination must differ from the source path")
                 transaction = Transaction.begin(
-                    source_path.parent, "file_decrypt", source_path.name, destination.name, source_info,
+                    source_path.parent, "file_decrypt", source_path.name, destination.name,
                     parent_fd=anchor.fd if anchor is not None else None,
                 )
                 fd = transaction.open_result()
@@ -834,7 +834,7 @@ class _DirectoryOperations:
             _validate_component(destination_name, source.parent)
             destination = source.with_name(destination_name)
             transaction = Transaction.begin(
-                source.parent, "dir_encrypt", source.name, destination.name, source_info,
+                source.parent, "dir_encrypt", source.name, destination.name,
                 parent_fd=anchor.fd if anchor is not None else None,
             )
             if anchor is not None:
@@ -869,7 +869,7 @@ class _DirectoryOperations:
             _validate_component(destination_name, source.parent)
             destination = source.with_name(destination_name)
             transaction = Transaction.begin(
-                source.parent, "dir_decrypt", source.name, destination.name, source_info,
+                source.parent, "dir_decrypt", source.name, destination.name,
                 parent_fd=anchor.fd if anchor is not None else None,
             )
             if anchor is not None:
