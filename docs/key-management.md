@@ -30,7 +30,7 @@ El contenedor contiene keysets independientes para las operaciones criptográfic
 
 `MasterKey` es opaco para el consumidor: no expone keysets, claves derivadas, nonces internos ni detalles del backend. El contenedor de claves es distinto del formato de cada archivo o nombre cifrado.
 
-La estructura lógica y la propuesta de disposición binaria v1 se especifican en [Formato de MasterKey](master-key-format.md). Los casos de conformidad previstos están en [Plan de pruebas del formato MasterKey](master-key-format-test-plan.md). La propuesta de layout aún requiere aprobación y cierre de sus límites criptográficos antes de implementar.
+La estructura lógica y la disposición binaria v1 aprobada se especifican en [Formato de MasterKey](master-key-format.md). Los casos de conformidad previstos están en [Plan de pruebas del formato MasterKey](master-key-format-test-plan.md). El perfil Argon2id v1 está aprobado; los límites de entrada y contraseña aún requieren confirmación contractual antes de implementar.
 
 ## Generación aleatoria
 
@@ -56,7 +56,7 @@ Los campos de cabecera que controlan la interpretación del contenedor deben aut
 
 `Crypto(master_key=..., password=...)` deriva la clave de protección y abre el contenedor. Una contraseña incorrecta, un contenedor alterado o uno malformado debe producir un error de inicialización; nunca debe generar silenciosamente keysets nuevos.
 
-La contraseña se interpreta como texto UTF-8. La política exacta de normalización Unicode y los límites de longitud deben fijarse antes de implementar. La contraseña nunca se persiste dentro del contenedor.
+La contraseña se interpreta como texto UTF-8 estricto, sin normalización Unicode implícita. Los límites de longitud propuestos se especifican en [la política Argon2id](argon2id-policy.md) y deben confirmarse en el contrato de implementación. La contraseña nunca se persiste dentro del contenedor.
 
 ## Separación
 
