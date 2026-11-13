@@ -2,7 +2,7 @@
 
 ## Estado
 
-Herramienta de medición disponible para desarrollo. **El perfil 64 MiB / 3 / p=1 continúa siendo una propuesta** hasta obtener resultados en el hardware objetivo y aprobarlos explícitamente. Este benchmark no implementa ni modifica la apertura de `MasterKey`.
+Herramienta de medición disponible para desarrollo. **El perfil 64 MiB / 3 / p=1 está aprobado como perfil de producción v1** con base en los resultados del equipo de referencia registrados en este documento. Por decisión del proyecto no se realizó validación en otros equipos; la aprobación no certifica todas las plataformas. Este benchmark no implementa ni modifica la apertura de `MasterKey`.
 
 ## Artefacto
 
@@ -43,6 +43,43 @@ python tests/backend_validation/benchmark_argon2id.py \
 ```
 
 El presupuesto es una salvaguarda de memoria de trabajo Argon2 estimada, no una detección de RAM disponible ni una garantía contra OOM. Antes de elevarlo, comprobar memoria libre y cerrar cargas innecesarias.
+
+## Resultados de referencia aprobados
+
+### Entorno
+
+- Sistema: Linux x86_64, kernel `6.17.0-35-generic`, glibc 2.39.
+- Python: CPython 3.12.3.
+- `argon2-cffi`: 25.1.0.
+- CPU lógica: 4.
+- Perfil: Argon2id v19, 65.536 KiB, 3 iteraciones, paralelismo 1, salida de 32 bytes.
+- Presupuesto configurado en el benchmark: 256 MiB de memoria Argon2 estimada.
+
+### Latencia (30 lotes por nivel; 5 warmups)
+
+| Métrica | Concurrencia 1 | Concurrencia 2 |
+|---|---:|---:|
+| Mediana por derivación | 480,58 ms | 551,85 ms |
+| P95 por derivación | 581,59 ms | 760,73 ms |
+| Máximo por derivación | 584,78 ms | 1.085,04 ms |
+| Mediana de tiempo de lote | 481,14 ms | 559,55 ms |
+| P95 de tiempo de lote | 582,27 ms | 1.040,04 ms |
+
+### Memoria residente máxima (medición separada con GNU time)
+
+Se ejecutó el benchmark en procesos independientes con `/usr/bin/time -v`, 30 lotes y 5 warmups para cada nivel:
+
+| Métrica | Concurrencia 1 | Concurrencia 2 |
+|---|---:|---:|
+| RSS máximo | 85.712 KiB (83,70 MiB) | 151.180 KiB (147,64 MiB) |
+| Presupuesto | 256 MiB | 256 MiB |
+| Margen respecto al presupuesto | 172,30 MiB | 108,36 MiB |
+| Swap reportado | 0 | 0 |
+| Exit status | 0 | 0 |
+
+La RSS incluye Python, bibliotecas y memoria auxiliar; no es una medición aislada del área de trabajo de Argon2. Los valores son high-water marks del proceso informados por GNU time. Las mediciones de latencia de estos procesos separados fueron: concurrencia 1, mediana 521,30 ms, P95 658,61 ms y máximo 673,08 ms; concurrencia 2, mediana 560,83 ms, P95 639,99 ms y máximo 955,94 ms. Las variaciones entre ejecuciones son esperables y no deben mezclarse como si fueran una única muestra.
+
+**Decisión:** el perfil 64 MiB / 3 / p=1 se aprueba para MasterKey v1. En el equipo medido, dos derivaciones simultáneas alcanzaron 147,64 MiB de RSS máximo, dentro del presupuesto de referencia de 256 MiB. La librería no creará concurrencia interna; la aplicación integradora seguirá siendo responsable de limitar aperturas simultáneas según su presupuesto real. La omisión de pruebas en otros equipos es una decisión de alcance, no evidencia de compatibilidad universal.
 
 ## Métricas
 
@@ -94,4 +131,4 @@ La decisión final debe registrar:
 - Memoria teórica por concurrencia y presupuesto operativo de la aplicación.
 - Perfil aprobado o cambios explícitos a la política.
 
-Hasta que se revisen esos datos, el perfil permanece propuesto y los límites de apertura siguen pendientes de aprobación.
+El perfil está aprobado para v1. Los límites de entrada y contraseña continúan pendientes de confirmación contractual; las pruebas del parser productivo también siguen pendientes.
