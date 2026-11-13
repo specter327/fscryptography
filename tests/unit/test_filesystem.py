@@ -254,15 +254,15 @@ def test_source_replacement_during_retirement_is_restored(manager, tmp_path, mon
     source = tmp_path / "replacement.txt"
     retained_original = tmp_path / "original-retained.txt"
     source.write_bytes(b"original source")
-    publish = _filesystem._publish_noreplace
+    rename_noreplace = _filesystem.DirectoryAnchor.rename_noreplace
 
-    def replace_before_quarantine(src, dst):
-        if src == source and dst.name == "source":
+    def replace_before_quarantine(anchor, source_name, destination_fd, destination_name):
+        if source_name == source.name and destination_name == "source":
             source.rename(retained_original)
             source.write_bytes(b"concurrent replacement")
-        return publish(src, dst)
+        return rename_noreplace(anchor, source_name, destination_fd, destination_name)
 
-    monkeypatch.setattr(_filesystem, "_publish_noreplace", replace_before_quarantine)
+    monkeypatch.setattr(_filesystem.DirectoryAnchor, "rename_noreplace", replace_before_quarantine)
     with pytest.raises(AtomicOperationError, match="identity changed"):
         manager.file.encrypt(source)
 
@@ -298,3 +298,43 @@ def test_recovery_inspection_reports_retained_source(manager, tmp_path, monkeypa
         and record.classification == "source_retained"
         for record in records
     )
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="directory descriptor anchoring is GNU/Linux-only")
+def test_operations_remain_anchored_when_parent_path_is_replaced(manager, tmp_path, monkeypatch):
+    source = tmp_path / "anchored.txt"
+    source.write_bytes(b"anchored payload")
+    moved_parent = tmp_path.with_name(tmp_path.name + "-moved")
+    original_copy = _filesystem._copy_encrypt
+    replaced = False
+
+    def replace_parent_after_transaction(primitive, src, dst, aad):
+        nonlocal replaced
+        if not replaced:
+            tmp_path.rename(moved_parent)
+            tmp_path.mkdir()
+            replaced = True
+        return original_copy(primitive, src, dst, aad)
+
+    monkeypatch.setattr(_filesystem, "_copy_encrypt", replace_parent_after_transaction)
+    manager.file.encrypt(source)
+
+    assert replaced
+    assert (moved_parent / "anchored.fscrypt").is_file()
+    assert not (moved_parent / "anchored.txt").exists()
+    assert list(tmp_path.iterdir()) == []
+    records = manager.inspect_recovery(moved_parent)
+    assert any(record.operation == "file_encrypt" and record.classification == "source_removed" for record in records)
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="descriptor-relative inspection is GNU/Linux-only")
+def test_recovery_inspection_does_not_follow_transaction_symlink(manager, tmp_path):
+    transaction_link = tmp_path / (".fscryptography-txn-" + "0" * 32)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "journal.json").write_text("not a journal", encoding="utf-8")
+    transaction_link.symlink_to(outside, target_is_directory=True)
+
+    records = manager.inspect_recovery(tmp_path)
+    assert len(records) == 1
+    assert records[0].classification == "corrupt"
