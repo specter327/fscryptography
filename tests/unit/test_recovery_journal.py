@@ -178,9 +178,9 @@ def test_result_identity_mismatch_is_unverified(tmp_path):
     transaction.result_path.write_bytes(b"expected result")
     transaction.set_result_ready(transaction.result_path.lstat())
     transaction.result_path.write_bytes(b"replacement with different inode")
-    replacement = transaction.directory / "replacement"
-    transaction.result_path.rename(replacement)
-    replacement.rename(transaction.result_path)
+    retained = transaction.directory / "retained-result"
+    transaction.result_path.rename(retained)
+    transaction.result_path.write_bytes(b"replacement with a different identity")
 
     record = inspect(tmp_path)[0]
 
