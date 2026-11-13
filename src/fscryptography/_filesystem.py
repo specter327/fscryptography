@@ -317,6 +317,8 @@ def _retire_source(
         ):
             try:
                 _publish_noreplace(retained, source_path)
+                _sync_parent_directory(source_path.parent)
+                _sync_parent_directory(transaction.directory)
             except Exception as restore_error:
                 raise AtomicOperationError(
                     "source identity changed; the unexpected entry remains in transaction storage "
