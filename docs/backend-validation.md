@@ -13,8 +13,8 @@ Fecha de revisión: 2026-11-12.
 | Tink Python: AEAD | API documentada | Puede crear primitivas AEAD y serializar keysets. |
 | Tink Python: Streaming AEAD | **Validado en CI** | `AES256_GCM_HKDF_1MB` generó keysets, se serializó/recuperó y superó pruebas de cifrado autenticado en Tink 1.16.1 con Python 3.10–3.13 sobre Ubuntu 26.04. |
 | Serialización de keysets Tink | API binaria documentada | Puede utilizarse el formato Protobuf propio de Tink; requiere autorización explícita para material secreto. |
-| Argon2id | API disponible en argon2-cffi | La derivación de una clave binaria fija puede hacerse con la API low-level. |
-| AES-GCM para envolver MasterKey | API disponible en cryptography | Candidato apropiado para el payload pequeño del contenedor, no para cifrado segmentado de archivos. |
+| Argon2id | **Prueba automatizada añadida; CI pendiente** | La prueba valida derivación Argon2id de 32 bytes, determinismo y separación por contraseña/salt. Parámetros de producción aún no definidos. |
+| AES-GCM para envolver MasterKey | **Prueba automatizada añadida; CI pendiente** | La prueba valida round-trip AES-256-GCM y rechazo de contraseña, AAD, nonce y ciphertext incorrectos. |
 
 ## Tink Python
 
@@ -75,11 +75,28 @@ La implementación debe generar un nonce nuevo y aleatorio por contenedor y nunc
 
 **No utilizar `AESGCM` para cifrar archivos grandes por bloques manuales.** Eso exigiría diseñar un protocolo de segmentación, nonce, framing, autenticación y cierre propio. El cifrado de archivos debe permanecer delegado a un Streaming AEAD mantenido.
 
+## Validación ejecutable de Argon2id y AES-GCM para MasterKey
+
+El repositorio incluye `tests/backend_validation/test_master_key_protection.py`. La prueba valida las APIs y la composición criptográfica candidata, no una implementación de producción del contenedor.
+
+Cobertura:
+
+1. Argon2id mediante `argon2.low_level.hash_secret_raw` con `Type.ID`.
+2. Salida binaria de 32 bytes.
+3. Derivación determinista para la misma contraseña, salt y parámetros.
+4. Claves diferentes al cambiar contraseña o salt.
+5. Cifrado/descifrado AES-256-GCM con nonce aleatorio de 12 bytes y AAD.
+6. Rechazo mediante `InvalidTag` ante contraseña incorrecta, AAD alterado, nonce alterado y ciphertext alterado.
+
+Los parámetros de Argon2id usados por esta prueba son deliberadamente modestos (`time_cost=1`, `memory_cost=8192 KiB`, `parallelism=1`) para una ejecución rápida en CI. **No son parámetros normativos ni recomendación de producción.** Los parámetros de producción, sus límites de parsing y la política frente a entradas hostiles siguen pendientes de benchmark y diseño.
+
+El workflow instala `argon2-cffi>=23.1,<26` y `cryptography>=42,<47`, registra las versiones efectivas y ejecuta la prueba en Python 3.10–3.13. La ejecución queda pendiente hasta que GitHub Actions complete los jobs.
+
 ## Arquitectura candidata resultante
 
 - **Archivos:** Streaming AEAD de Tink con AES256-GCM-HKDF-1MB, únicamente si la prueba de generación y round-trip del keyset pasa. Si no pasa, detener la selección del backend y evaluar alternativas; no implementar un protocolo propio.
 - **Nombres:** AEAD convencional de Tink con keyset independiente, sujeto a validar una plantilla y límites de longitud de nombres.
-- **MasterKey protegido:** Argon2id de argon2-cffi para derivar 32 bytes y AES-GCM de cryptography para envolver el payload serializado.
+- **MasterKey protegido:** Argon2id de argon2-cffi para derivar 32 bytes y AES-256-GCM de cryptography para envolver el payload serializado. La API/composición tiene una prueba CI añadida; la validación de ejecución aún está pendiente.
 - **Keysets:** formato binario Protobuf soportado por Tink, contenido dentro del payload del contenedor; no definir un formato alternativo de keyset.
 
 Esta arquitectura es una propuesta de integración, no una selección definitiva de dependencias ni una afirmación de que el backend de archivos ya funciona.
@@ -126,8 +143,8 @@ ni la auditoría de seguridad.
 5. Verificar que truncamiento, alteración, reordenamiento y AAD incorrecto no producen plaintext aceptado.
 6. Verificar que el plaintext de descifrado no se publica antes de autenticar el final del stream.
 7. Repetir para el keyset AEAD de nombres.
-8. Verificar Argon2id con contraseña correcta/incorrecta, parámetros fuera de límites y contenedor alterado.
-9. Verificar AES-GCM de envoltura con nonce/AAD/ciphertext alterados.
+8. Verificar Argon2id con contraseña correcta/incorrecta, parámetros fuera de límites y contenedor alterado. La prueba de API actual cubre derivación, longitud y variación por contraseña/salt; no valida todavía el parser ni la política de límites de producción.
+9. Verificar AES-GCM de envoltura con nonce/AAD/ciphertext alterados. La prueba de API actual cubre estos rechazos en el nivel AEAD.
 10. Registrar versiones exactas de Python, Tink, argon2-cffi, cryptography y plataformas.
 
 ## Fuentes oficiales consultadas
