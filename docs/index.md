@@ -26,4 +26,9 @@ Referencia técnica de la librería. El README contiene la presentación del pro
 ## Estado
 **Definido** identifica requisitos acordados. **Propuesto** identifica el diseño preferido pendiente de validación. **Pendiente** señala decisiones aún abiertas. **Fuera de alcance** identifica capacidades que no pertenecen a la librería.
 
-No se debe presentar una propuesta como funcionalidad implementada. La validación del backend, los formatos binarios y las garantías de recuperación preceden a la implementación.
+No se debe presentar una propuesta como funcionalidad implementada. La implementación principal y la validación automatizada de backend, formatos y filesystem están presentes; la versión estable sigue condicionada a las validaciones residuales enumeradas en los documentos técnicos.
+
+
+## Estado de madurez
+
+La librería dispone de implementación funcional, formatos v1.0 documentados, pruebas unitarias, integración filesystem en runners ext4/NTFS, CI de dependencias mínimas y distribución wheel/sdist. Continúan pendientes la validación específica de Windows 11 cliente, fuzzing/property-based de parsers, escenarios ampliados de interrupción en Windows, revisión independiente y preparación final de release.
