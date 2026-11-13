@@ -51,7 +51,7 @@ La suite `tests/unit/test_filesystem_concurrency.py` añade:
 - Sustitución determinista del origen durante la retirada y sustitución del directorio padre durante la operación, cubiertas por pruebas GNU/Linux existentes en `tests/unit/test_filesystem.py`.
 - Sustitución determinista de un directorio durante su renombrado, también cubierta en GNU/Linux.
 
-La detección de modificación compara metadatos observables del descriptor; **no es una instantánea criptográfica del origen ni protege frente a un escritor hostil que pueda manipular metadatos, explotar la granularidad temporal del filesystem o modificar bytes y restaurarlos antes de la comprobación**. En Windows, la retirada aún usa `lstat` seguido de `unlink` y no tiene la cuarentena anclada por descriptor de GNU/Linux; por tanto, la carrera de sustitución entre ambas llamadas no está cerrada. La publicación GNU/Linux usa `renameat2(RENAME_NOREPLACE)` y ahora tiene una prueba determinista que crea un destino competidor justo antes del renombrado; el destino concurrente y el origen deben permanecer intactos. La prueba no sustituye la validación empírica en todos los filesystems.
+La detección de modificación compara metadatos observables del descriptor; **no es una instantánea criptográfica del origen ni protege frente a un escritor hostil que pueda manipular metadatos, explotar la granularidad temporal del filesystem o modificar bytes y restaurarlos antes de la comprobación**. En Windows, la retirada mueve primero el origen a la entrada `source` del directorio transaccional, verifica su identidad después del movimiento y solicita el borrado mediante `SetFileInformationByHandle` sobre un handle abierto con `DELETE`. Si una entrada sustituta es movida por la carrera previa al renombrado, la identidad posterior no coincide y se intenta restaurar sin sobrescribir una entrada competidora. La eliminación afecta al objeto del handle ya verificado, no a una ruta que pueda resolverse de nuevo. El directorio transaccional conserva la ACL heredada del padre: esto cierra la carrera de sustitución de la ruta que podría provocar el borrado de un objeto distinto, pero no aísla el journal frente a otro proceso con permisos equivalentes para manipular ese directorio. La publicación GNU/Linux usa `renameat2(RENAME_NOREPLACE)` y ahora tiene una prueba determinista que crea un destino competidor justo antes del renombrado; el destino concurrente y el origen deben permanecer intactos. La prueba no sustituye la validación empírica en todos los filesystems.
 
 ## Estados tras interrupción
 
@@ -75,7 +75,7 @@ Si origen y destino coexisten, no se debe eliminar ninguno sin verificar su iden
 - [x] Detección de cambios ordinarios de identidad/tamaño/mtime/ctime del descriptor durante streaming, en cifrado y descifrado.
 - [x] Pruebas deterministas GNU/Linux de sustitución del padre, origen y directorio durante la operación.
 - [ ] Garantía frente a escritores hostiles capaces de manipular/restaurar metadatos o competir dentro de su granularidad.
-- [ ] Retirada de origen resistente a TOCTOU en Windows (cuarentena privada con identidad verificable).
+- [x] Retirada Windows mediante cuarentena transaccional, verificación de identidad por handle y disposición de borrado sobre ese mismo handle; sin afirmación de ACL privada ni aislamiento frente a procesos con permisos equivalentes.
 - [x] Prueba GNU/Linux de colisión de destino justo en el punto de publicación.
 - [ ] Interrupción abrupta del proceso después de cada barrera persistente.
 - [ ] Flush verificable de directorio y garantías de durabilidad en Windows.
@@ -83,3 +83,5 @@ Si origen y destino coexisten, no se debe eliminar ninguno sin verificar su iden
 - [ ] Política de preservación de permisos, propietario y timestamps.
 
 No se siguen enlaces simbólicos y solo se aceptan archivos regulares/directorios reales. Los enlaces duros, especiales y recursos de red quedan fuera de la matriz v1.
+
+La prueba `test_windows_source_substitution_during_quarantine_is_never_deleted` fuerza una sustitución inmediatamente antes del movimiento al directorio transaccional y comprueba que el objeto sustituto se restaura y no se elimina. Las pruebas de round-trip de Windows ejercitan la eliminación normal por handle. La durabilidad de las entradas de directorio en Windows sigue sin estar garantizada por `fsync` de directorio.
