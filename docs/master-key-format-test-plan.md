@@ -54,8 +54,10 @@ Los fixtures criptográficos deben ser reproducibles. La generación aleatoria d
 | KDF | Variante o versión desconocida | Rechazo antes de derivar |
 | KDF | Parámetros distintos del perfil productivo permitido | Rechazo antes de ejecutar Argon2id |
 | KDF | Parámetros extremos de memoria, iteraciones o paralelismo | Rechazo temprano, sin invocar Argon2id |
-| Entrada | Base64 por encima del máximo o con caracteres/padding inválidos | Rechazo antes de decodificar completamente |
+| Entrada | Base64 por encima de 174.868 caracteres ASCII o con caracteres/padding inválidos | Rechazo antes de decodificar completamente |
+| Entrada | Contenedor binario superior a 131.149 bytes | Rechazo antes de parsear campos variables |
 | Contraseña | Vacía o superior a 1.024 bytes UTF-8 | Rechazo antes de ejecutar Argon2id |
+| Campos fijos | Salt distinto de 16 bytes, nonce distinto de 12 bytes o tag distinto de 16 bytes | Rechazo estructural/criptográfico |
 | Contraseña | Contraseña correcta | Apertura correcta |
 | Contraseña | Contraseña incorrecta | Fallo de autenticación, sin keysets |
 | AAD | Alterar cada campo de cabecera protegido | Rechazo estructural o de autenticación |
@@ -90,13 +92,13 @@ El fuzzing no sustituye vectores golden ni pruebas criptográficas.
 
 La fase de especificación del formato se considera cerrada cuando:
 1. [x] Se aprueba el layout binario v1 y sus límites.
-2. [x] Se ejecuta el benchmark de referencia y se aprueba el perfil Argon2id v1 (64 MiB / 3 / p=1). [ ] Se confirman contractualmente los límites de entrada y contraseña de [la política de Argon2id](argon2id-policy.md).
+2. [x] Se ejecuta el benchmark de referencia y se aprueba el perfil Argon2id v1 (64 MiB / 3 / p=1), junto con los límites normativos de entrada y contraseña de [la política de Argon2id](argon2id-policy.md).
 3. [ ] Se aprueba el perfil de nombres y su tipo de keyset.
 4. [~] Se publican vectores golden iniciales de estructura y envoltura; faltan vectores de keysets Tink válidos e inválidos.
 5. [ ] Se acuerda el catálogo de errores de parsing/autenticación.
 6. [ ] Se define la matriz de plataformas para ejecutar la conformidad.
 
-La política de producción aprobada para v1 utiliza Argon2id v19 con 64 MiB, 3 iteraciones y paralelismo 1; exige aceptación estricta del perfil antes de ejecutar la KDF. Los valores de fixtures de bajo coste no deben ser aceptados por el parser productivo. Los límites de entrada y contraseña aún requieren confirmación contractual; véase [Política de Argon2id y límites de apertura](argon2id-policy.md).
+La política de producción aprobada para v1 utiliza Argon2id v19 con 64 MiB, 3 iteraciones y paralelismo 1; exige aceptación estricta del perfil antes de ejecutar la KDF. Los valores de fixtures de bajo coste no deben ser aceptados por el parser productivo. Los límites de entrada y contraseña están aprobados contractualmente; véase [Política de Argon2id y límites de apertura](argon2id-policy.md).
 
 La implementación funcional de archivos y directorios permanece bloqueada hasta completar esta fase.
 
