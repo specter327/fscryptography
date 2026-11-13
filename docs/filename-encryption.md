@@ -147,3 +147,13 @@ El cifrado no oculta jerarquía, cantidad de recursos ni otros metadatos del fil
 - [x] Integrar el keyset de nombres con el contenedor MasterKey y probar su recuperación en la fachada Crypto.
 - [ ] Integrar cifrado/descifrado con operaciones reales de rename y publicación sin sobrescritura.
 - [ ] Validar la representación y las reglas sobre NTFS y ext4 reales.
+
+
+## Platform-specific component-length measurement
+
+The internal component limit uses the native filesystem unit:
+
+- GNU/Linux: bytes in the strict UTF-8 sequence.
+- Windows: UTF-16 code units (a supplementary character occupies two units).
+
+The encrypted representation (~1 plus Base64URL) is ASCII, so its length is identical in bytes and UTF-16 code units. For the recovered plaintext name, Windows validation must count UTF-16 code units; measuring UTF-8 bytes would incorrectly reject Unicode names that fit in NTFS. The implementation does not normalize Unicode or emulate the filesystem's own equivalence/case-folding rules.

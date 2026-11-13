@@ -55,6 +55,7 @@ def validate_name(
     """Validate one plaintext component and return its strict UTF-8 bytes.
 
     The caller supplies the effective destination component limit when known.
+    POSIX profiles measure UTF-8 bytes; Windows measures UTF-16 code units.
     No Unicode normalization or case folding is performed.
     """
     encoded = _as_component_bytes(name)
@@ -78,7 +79,14 @@ def validate_name(
             raise TypeError("max_component_bytes must be an integer or None")
         if max_component_bytes <= 0:
             raise ValueError("max_component_bytes must be positive")
-        if len(encoded) > max_component_bytes:
+        # NTFS/Win32 component limits use UTF-16 code units; POSIX NAME_MAX
+        # uses the number of encoded filename bytes.
+        component_length = (
+            len(name.encode("utf-16-le")) // 2
+            if selected is NameProfile.WINDOWS
+            else len(encoded)
+        )
+        if component_length > max_component_bytes:
             raise NameConstraintError("name exceeds the destination component limit")
 
     return encoded
