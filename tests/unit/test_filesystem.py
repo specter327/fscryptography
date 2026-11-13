@@ -75,7 +75,7 @@ def test_file_encrypted_name_round_trip(manager, tmp_path):
     source.write_bytes(b"secret")
 
     manager.file.encrypt(source, encrypt_name=True)
-    encrypted = next(path for path in tmp_path.iterdir() if path != source)
+    encrypted = next(path for path in tmp_path.iterdir() if path.name.startswith("~1"))
     assert encrypted.name.startswith("~1")
     assert not source.exists()
 
