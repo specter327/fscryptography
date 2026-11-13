@@ -42,7 +42,7 @@ Los keysets se generan independientemente mediante el backend criptográfico. No
 
 La serialización debe utilizar el mecanismo soportado por el backend seleccionado. Tink Python documenta serialización binaria Protobuf de keysets, pero requiere un token explícito para acceder al material secreto. Ese mecanismo debe permanecer confinado al módulo interno de gestión de claves. No se inventará un formato de keyset propio ni se expondrá su estructura mediante la API pública.
 
-La generación y recuperación del keyset Streaming AEAD con la plantilla `AES256_GCM_HKDF_1MB` quedó validada en Tink Python 1.16.1 mediante CI para Python 3.10–3.13. La prueba de Argon2id y AES-GCM para protección del contenedor ya está incorporada al workflow, pero su ejecución CI y la fijación de parámetros de producción siguen pendientes. Véase [Validación del backend criptográfico](backend-validation.md).
+La generación y recuperación del keyset Streaming AEAD con la plantilla `AES256_GCM_HKDF_1MB` quedó validada en Tink Python 1.16.1 mediante CI para Python 3.10–3.13. La prueba de Argon2id y AES-GCM para protección del contenedor pasó en GitHub Actions con Python 3.10–3.13, `argon2-cffi 25.1.0` y `cryptography 46.0.7` sobre Linux x86_64. Los parámetros normativos de producción y la validación multiplataforma siguen pendientes. Véase [Validación del backend criptográfico](backend-validation.md).
 
 ## Modo aleatorio
 
@@ -54,7 +54,7 @@ Por diseño, este modo no ofrece autenticación criptográfica del contenedor fr
 
 El modo protegido utiliza Argon2id para derivar una clave de envoltura a partir de la contraseña y un salt aleatorio. Esa clave protege el payload mediante un esquema AEAD seleccionado y validado antes de implementar.
 
-La integración seleccionada para el prototipo es Argon2id de `argon2-cffi` y AES-256-GCM de `cryptography` para el payload acotado del contenedor. Se añadió una prueba ejecutable para validar derivación, round-trip y rechazos de autenticación; queda pendiente que CI la ejecute satisfactoriamente. Las versiones mínimas y los parámetros de coste normativos siguen pendientes de validación de plataformas y benchmark.
+La integración seleccionada para el prototipo es Argon2id de `argon2-cffi` y AES-256-GCM de `cryptography` para el payload acotado del contenedor. La prueba ejecutable pasó en CI para derivación, round-trip y rechazos de autenticación. Las versiones mínimas normativas, los parámetros de coste y la compatibilidad en plataformas objetivo siguen pendientes de benchmark y validación.
 
 El contenedor incluye:
 
