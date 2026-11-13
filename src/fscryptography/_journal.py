@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .names import NameProfile, validate_name
+
 _PREFIX = ".fscryptography-txn-"
 _ID = re.compile(r"^[0-9a-f]{32}$")
 _MAX_RECORD = 16 * 1024
