@@ -350,6 +350,7 @@ Esta librería manipula claves criptográficas y recursos del usuario. Antes de 
 - No ejecutes operaciones destructivas sin backups recuperables.
 - No asumas protección frente a malware, procesos privilegiados o procesos hostiles bajo el mismo usuario.
 - No interpretes el cifrado como protección de metadatos: tamaños, cantidad de archivos, permisos, timestamps y patrones de acceso pueden seguir expuestos.
+- Las operaciones de archivo rechazan recursos con hard links múltiples y crean resultados nuevos; no preservan automáticamente permisos, propietario, ACL, timestamps, xattrs ni alternate data streams. Consulta el [contrato de metadatos y enlaces](docs/atomic-operations.md#enlaces-duros-y-contrato-de-metadatos-fase-de-endurecimiento).
 
 **La implementación y sus pruebas automatizadas no equivalen a una auditoría criptográfica independiente.** No se garantiza borrado seguro de secretos en memoria Python ni durabilidad uniforme en todos los filesystems.
 
