@@ -1,0 +1,45 @@
+{
+  "format": "fscryptography file header v1.0 conformance vectors",
+  "vectors": [
+    {
+      "id": "visible-original-extension",
+      "fields": {
+        "original_extension": ".txt",
+        "output_extension": ".fscrypt",
+        "encrypted_name": false,
+        "expected_output_extension": ".fscrypt"
+      },
+      "header_hex": "4653435246494c000100000100000020000400082e7478742e66736372797074"
+    },
+    {
+      "id": "visible-no-extensions",
+      "fields": {
+        "original_extension": null,
+        "output_extension": "",
+        "encrypted_name": false,
+        "expected_output_extension": ""
+      },
+      "header_hex": "4653435246494c00010000000000001400000000"
+    },
+    {
+      "id": "encrypted-name-no-cleartext-metadata",
+      "fields": {
+        "original_extension": null,
+        "output_extension": null,
+        "encrypted_name": true,
+        "expected_output_extension": null
+      },
+      "header_hex": "4653435246494c00010000020000001400000000"
+    },
+    {
+      "id": "visible-custom-extension",
+      "fields": {
+        "original_extension": ".tar.gz",
+        "output_extension": ".locked",
+        "encrypted_name": false,
+        "expected_output_extension": ".locked"
+      },
+      "header_hex": "4653435246494c000100000100000022000700072e7461722e677a2e6c6f636b6564"
+    }
+  ]
+}

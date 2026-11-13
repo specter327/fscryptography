@@ -10,13 +10,13 @@ Decisión de diseño: AES-256-GCM mediante Streaming AEAD para archivos grandes.
 
 Tamaño de segmento objetivo predeterminado: **1 MiB**. Solo se expondrán tamaños configurables que el backend admita realmente. El tamaño interno puede incluir overhead y no equivaler exactamente a 1 MiB de plaintext.
 
-Google Tink es el backend seleccionado. La plantilla Python `AES256_GCM_HKDF_1MB` se genera y recupera mediante la API Protobuf de keysets de Tink en la implementación actual. Las pruebas automatizadas validan round-trip y rechazo de alteración/truncamiento en los entornos CI ejecutados. La compatibilidad con sistemas operativos y filesystems objetivo y la integración sobre rutas reales siguen pendientes. No se cambiará silenciosamente a AES-CTR-HMAC.
+Google Tink es el backend seleccionado. La plantilla Python `AES256_GCM_HKDF_1MB` se genera y recupera mediante la API Protobuf de keysets de Tink en la implementación actual. Las pruebas automatizadas validan round-trip y rechazo de alteración/truncamiento en los entornos CI ejecutados. La integración sobre rutas reales está validada en CI sobre Ubuntu 22.04/24.04 con ext4 y Windows Server 2025 con NTFS, Python 3.11–3.13. Windows 11 cliente y otras configuraciones de filesystem siguen pendientes. No se cambiará silenciosamente a AES-CTR-HMAC.
 
 La estructura implementada del archivo se documenta en [Formato de archivos](file-format.md): cabecera versionada autenticada como AAD seguida por el flujo Tink. La cabecera y sus metadatos se validan antes de iniciar la transformación.
 
 ## Nombres
 
-El perfil AEAD de nombres es Tink `AES256_GCM`, mediante la interfaz convencional `Aead` y un keyset independiente del destinado al contenido. El codec usa la representación `~1` + Base64URL sin padding, AAD constante `fscryptography:filename:v1` y validación estricta de nombres. El límite derivado es 156 bytes UTF-8 cuando el límite del componente es 255 bytes. La integración con MasterKey y las operaciones de transformación de nombres mediante rename/publicación sin reemplazo están implementadas. La validación integral de comportamiento y concurrencia en la matriz de filesystems objetivo sigue pendiente. Véase [Cifrado de nombres](filename-encryption.md).
+El perfil AEAD de nombres es Tink `AES256_GCM`, mediante la interfaz convencional `Aead` y un keyset independiente del destinado al contenido. El codec usa la representación `~1` + Base64URL sin padding, AAD constante `fscryptography:filename:v1` y validación estricta de nombres. El límite derivado es 156 bytes UTF-8 cuando el límite del componente es 255 bytes. La integración con MasterKey y las operaciones de transformación de nombres mediante rename/publicación sin reemplazo están implementadas. La validación de comportamiento de nombres, Unicode, colisiones y round-trip está ejecutada en la matriz CI ext4/NTFS. La validación específica de Windows 11 cliente y de configuraciones adicionales de filesystem sigue pendiente. Véase [Cifrado de nombres](filename-encryption.md).
 
 ## Separación de claves
 
