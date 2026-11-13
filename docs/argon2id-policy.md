@@ -2,13 +2,13 @@
 
 ## Estado
 
-**Propuesta técnica para MasterKey v1; pendiente de benchmark en hardware modesto y aprobación final.**
+**Perfil Argon2id v1 aprobado para la referencia de hardware evaluada.** La validación de portabilidad en otros equipos se omite por decisión del proyecto y no se presenta como realizada.
 
-Esta política define el perfil inicial de protección por contraseña y los límites que deben comprobarse antes de ejecutar Argon2id. No modifica el layout binario v1.0 aprobado: los parámetros continúan almacenándose en los campos ya definidos de la cabecera protegida.
+Esta política define el perfil de protección por contraseña y los límites que deben comprobarse antes de ejecutar Argon2id. No modifica el layout binario v1.0 aprobado: los parámetros continúan almacenándose en los campos ya definidos de la cabecera protegida.
 
-Los valores de los fixtures de prueba no son parámetros de producción.
+Los valores de los fixtures de prueba no son parámetros de producción. La aprobación del perfil no implica que el parser productivo o la gestión de claves estén implementados.
 
-## Perfil de producción propuesto
+## Perfil de producción aprobado
 
 | Parámetro | Valor |
 |---|---:|
@@ -20,7 +20,7 @@ Los valores de los fixtures de prueba no son parámetros de producción.
 | Salt | 16 bytes aleatorios |
 | Clave derivada | 32 bytes |
 
-El perfil prioriza una huella de memoria moderada y un coste temporal significativo sin multiplicar la memoria mediante paralelismo. No se debe interpretar como un valor universalmente óptimo: su aceptación definitiva depende de medirlo en el hardware más modesto que se pretenda soportar.
+El perfil prioriza una huella de memoria moderada y un coste temporal significativo sin multiplicar la memoria mediante paralelismo. Se aprobó con base en las mediciones del equipo de referencia Linux x86_64 descritas en [Benchmark reproducible de Argon2id](argon2id-benchmark.md). No constituye una garantía universal de rendimiento ni certifica plataformas no medidas.
 
 La implementación debe usar argon2-cffi y Argon2id. No debe implementar la función ni sustituirla por otra variante.
 
@@ -81,23 +81,15 @@ La librería no debe crear concurrencia interna para abrir contenedores. La apli
 
 El parser debe rechazar parámetros no admitidos sin intentar la KDF. Las pruebas de robustez deben demostrar que valores extremos de memoria, iteraciones o paralelismo se rechazan rápidamente.
 
-## Benchmark requerido antes de cerrar el perfil
+## Validación de rendimiento y alcance de la aprobación
 
-El perfil 64 MiB / 3 iteraciones / paralelismo 1 es una propuesta inicial, no una garantía de rendimiento.
+El benchmark del perfil 64 MiB / 3 iteraciones / paralelismo 1 se ejecutó en el equipo de referencia del proyecto. El procedimiento, las métricas de latencia y las mediciones RSS están registradas en [Benchmark reproducible de Argon2id](argon2id-benchmark.md).
 
-El procedimiento y la herramienta reproducible están definidos en [Benchmark reproducible de Argon2id](argon2id-benchmark.md). El ejecutable es `tests/backend_validation/benchmark_argon2id.py`; mide latencia, distribución de tiempos y lotes concurrentes controlados. No forma parte de la API pública ni se ejecuta en CI por defecto.
+La evaluación cubrió 30 lotes por nivel de concurrencia (1 y 2), con cinco llamadas de calentamiento, y mediciones separadas de RSS mediante GNU `/usr/bin/time -v`. El equipo registró RSS máximo de 85.712 KiB con una derivación y 151.180 KiB con dos derivaciones simultáneas. Ambas ejecuciones finalizaron sin swap y con código de salida cero.
 
-Antes de declararlo definitivo se debe medir:
+Se adopta una latencia individual orientativa de 0,5–1,5 segundos como objetivo de experiencia de uso, no como criterio criptográfico ni como autorización para reducir el coste. Las mediciones observadas quedaron dentro de ese intervalo en sus medianas; los máximos concurrentes pueden superar un segundo.
 
-- Un equipo de escritorio o portátil de gama modesta.
-- Un equipo de memoria limitada dentro de las plataformas objetivo.
-- Tiempo por derivación, memoria teórica y comportamiento bajo aperturas concurrentes.
-- Distribución de tiempos en ejecuciones repetidas, no solo una medición aislada.
-- Compatibilidad del resultado derivado entre las versiones de Python y plataformas soportadas.
-
-Como objetivo inicial de experiencia de uso, se propone que una apertura individual tarde aproximadamente entre 0,5 y 1,5 segundos en el equipo de referencia modesto. Este intervalo es un objetivo de benchmark, no un criterio criptográfico ni un límite que autorice reducir el coste sin revisión.
-
-Si el perfil no resulta viable en el hardware objetivo, se debe revisar explícitamente el perfil y su política de seguridad antes de cambiarlo. No se debe rebajar automáticamente el coste en función del equipo.
+Por decisión del proyecto no se realizarán más pruebas de portabilidad en otros equipos en esta fase. La aprobación se limita al perfil de producción v1 y a la referencia medida; no certifica el rendimiento ni la memoria en todas las plataformas. No se debe rebajar automáticamente el coste en función del equipo.
 
 ## Fixtures y separación entre prueba y producción
 
@@ -107,11 +99,11 @@ Las pruebas del formato pueden continuar validando esos vectores mediante su ver
 
 Debe existir al menos una prueba que confirme que el parser productivo rechaza los parámetros de fixture **antes de invocar Argon2id**.
 
-## Decisiones pendientes
+## Decisiones y trabajo pendiente
 
-- [ ] Ejecutar benchmark del perfil propuesto en hardware modesto y plataformas objetivo.
-- [ ] Aprobar o ajustar el perfil de producción a partir de esos resultados.
-- [ ] Confirmar los límites de entrada y contraseña antes de congelar el contrato de implementación.
+- [x] Ejecutar benchmark repetido del perfil en el equipo de referencia del proyecto.
+- [x] Aprobar Argon2id v19 / 65.536 KiB / 3 / 1 como perfil de producción v1.
+- [ ] Confirmar los límites de entrada y contraseña como parte del cierre del contrato de implementación.
 - [ ] Añadir pruebas del parser productivo que verifiquen rechazo previo a KDF y límites de concurrencia/admisión si se implementa.
 
-Hasta completar estas decisiones, los valores de esta política deben tratarse como propuesta y no como comportamiento ya implementado.
+El perfil criptográfico está aprobado para v1. Los límites de entrada y contraseña permanecen especificados como propuesta hasta su confirmación contractual; la implementación productiva y sus pruebas siguen pendientes.
