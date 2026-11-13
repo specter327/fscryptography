@@ -127,15 +127,17 @@ Los parámetros Argon2id productivos aceptados son exclusivamente versión 19, m
 
 El parser debe operar en este orden, sin ejecutar KDF ni deserializar keysets antes de validar el framing exterior:
 
-1. Verificar tamaño mínimo, magic y versión soportada.
-2. Verificar modo, schema y flags.
-3. Verificar que `header_length` coincide exactamente con el modo y versión.
-4. Verificar que `payload_length` no supera 128 KiB en modo aleatorio ni 128 KiB + 16 bytes en modo protegido, y que el tamaño total coincide exactamente con la entrada.
-5. En modo protegido, validar identificadores, versión Argon2, tamaños fijos, límites de entrada y el perfil Argon2id permitido según [la política de Argon2id](argon2id-policy.md), antes de ejecutar la KDF.
-6. En modo protegido, autenticar y descifrar el payload completo; no entregar bytes parciales.
-7. Validar el framing interno, las longitudes y la ausencia de bytes sobrantes.
-8. Parsear los dos keysets con Tink y verificar que corresponden a las primitivas esperadas.
-9. Entregar ambos keysets solo si todas las validaciones concluyeron correctamente.
+1. Verificar que la entrada Base64 no excede 174.868 caracteres ASCII y cumple el alfabeto y padding estrictos.
+2. Decodificar y verificar que el contenedor binario no excede 131.149 bytes.
+3. Verificar tamaño mínimo, magic y versión soportada.
+4. Verificar modo, schema y flags.
+5. Verificar que `header_length` coincide exactamente con el modo y versión.
+6. Verificar que `payload_length` no supera 128 KiB en modo aleatorio ni 128 KiB + 16 bytes en modo protegido, y que el tamaño total coincide exactamente con la entrada.
+7. En modo protegido, validar identificadores, versión Argon2, tamaños fijos, límites de contraseña y el perfil Argon2id permitido antes de ejecutar la KDF.
+8. En modo protegido, autenticar y descifrar el payload completo; no entregar bytes parciales.
+9. Validar el framing interno, las longitudes y la ausencia de bytes sobrantes.
+10. Parsear los dos keysets con Tink y verificar que corresponden a las primitivas esperadas.
+11. Entregar ambos keysets solo si todas las validaciones concluyeron correctamente.
 
 Cualquier fallo invalida el contenedor completo. Nunca se devuelve un keyset parcial ni se generan claves de reemplazo silenciosamente.
 
