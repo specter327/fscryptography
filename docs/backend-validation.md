@@ -2,7 +2,7 @@
 
 ## Alcance
 
-Esta revisión contrasta las decisiones criptográficas propuestas con las APIs públicas documentadas de las dependencias. Es una revisión documental de fuentes oficiales; **no equivale a una prueba de ejecución, auditoría criptográfica ni certificación de compatibilidad**.
+Este documento reúne la revisión de las APIs públicas de las dependencias y los resultados de pruebas ejecutables en GitHub Actions. **Los resultados CI validan únicamente las versiones y plataformas efectivamente ejecutadas; no equivalen a una auditoría criptográfica ni a certificación de compatibilidad general.**
 
 Fecha de revisión: 2026-11-12.
 
@@ -14,7 +14,7 @@ Fecha de revisión: 2026-11-12.
 | Tink Python: Streaming AEAD | **Validado en CI** | `AES256_GCM_HKDF_1MB` generó keysets, se serializó/recuperó y superó pruebas de cifrado autenticado en Tink 1.16.1 con Python 3.10–3.13 sobre Ubuntu 26.04. |
 | Serialización de keysets Tink | API binaria documentada | Puede utilizarse el formato Protobuf propio de Tink; requiere autorización explícita para material secreto. |
 | Argon2id | **Validado en CI** | Argon2id derivó 32 bytes y pasó pruebas de determinismo y variación por contraseña/salt en Python 3.10–3.13. |
-| AES-GCM para envolver MasterKey | **Prueba automatizada añadida; CI pendiente** | AES-256-GCM pasó round-trip y rechazó clave derivada de contraseña incorrecta, AAD, nonce y ciphertext alterados en Python 3.10–3.13. |
+| AES-GCM para envolver MasterKey | **Validado en CI** | AES-256-GCM pasó round-trip y rechazó clave derivada de contraseña incorrecta, AAD, nonce y ciphertext alterados en Python 3.10–3.13. |
 
 ## Tink Python
 
@@ -71,7 +71,7 @@ Los valores predeterminados de `PasswordHasher` no se adoptan automáticamente c
 
 Esto es adecuado como candidato para proteger el payload completo del contenedor: el tamaño del payload de keysets es acotado y no requiere streaming. La clave de 32 bytes procede de Argon2id.
 
-La implementación debe generar un nonce nuevo y aleatorio por contenedor y nunca reutilizar un nonce con la misma clave. La cabecera y los parámetros que controlan la interpretación del contenedor se autentican como AAD. La selección de `cryptography` como dependencia normativa queda pendiente de fijar versión mínima y compatibilidad de plataformas.
+La implementación debe generar un nonce nuevo y aleatorio por contenedor y nunca reutilizar un nonce con la misma clave. La cabecera y los parámetros que controlan la interpretación del contenedor se autentican como AAD. La selección de `cryptography` para el prototipo está validada en CI. Su versión mínima normativa y la compatibilidad en plataformas objetivo siguen pendientes.
 
 **No utilizar `AESGCM` para cifrar archivos grandes por bloques manuales.** Eso exigiría diseñar un protocolo de segmentación, nonce, framing, autenticación y cierre propio. El cifrado de archivos debe permanecer delegado a un Streaming AEAD mantenido.
 
