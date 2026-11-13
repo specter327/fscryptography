@@ -36,6 +36,8 @@ La API low-level de `argon2-cffi` ofrece derivación binaria de longitud fija me
 
 La contraseña es necesaria al inicializar Crypto con un contenedor protegido. La contraseña no se almacena. Crypto.generate(password=...) es alias de Crypto.derive(text=...). Crypto.generate() sin contraseña genera un contenedor aleatorio no protegido por contraseña.
 
+Perfil Argon2id aprobado para MasterKey v1: versión 19, memoria 65.536 KiB, 3 iteraciones, paralelismo 1, salt de 16 bytes y salida de 32 bytes. El parser debe aceptar exactamente este perfil y rechazar cualquier otra combinación antes de ejecutar la KDF. Los límites de entrada y contraseña se detallan en [la política Argon2id](argon2id-policy.md) y siguen pendientes de confirmación contractual.
+
 Los campos que describen el contenedor y sus parámetros deben autenticarse. No se implementarán primitivas propias.
 
 La criptografía asimétrica para envolver claves queda fuera de la primera versión.
