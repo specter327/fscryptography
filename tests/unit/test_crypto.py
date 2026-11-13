@@ -1,37 +1,60 @@
 import pytest
 
-from fscryptography import ClosedInstanceError, Crypto
+import fscryptography
+from fscryptography import ClosedInstanceError, Manager
+from fscryptography.errors import AuthenticationError
 
 
-def test_crypto_generate_and_open_random_master_key():
-    master_key = Crypto.generate()
-    crypto = Crypto(master_key=master_key)
-    assert crypto._names_primitive is not None
-    assert crypto._content_primitive is not None
-    crypto.close()
+def test_module_generate_and_manager_open_random_key():
+    key = fscryptography.generate()
+    manager = Manager(key)
+    assert manager._names_primitive is not None
+    assert manager._content_primitive is not None
+    assert manager.export_key() == key
+    manager.close()
     with pytest.raises(ClosedInstanceError):
-        crypto._names_primitive
+        manager.export_key()
 
 
-def test_crypto_generate_and_open_password_protected_master_key():
-    master_key = Crypto.generate(password="correct horse")
-    with Crypto(master_key=master_key, password="correct horse") as crypto:
-        assert crypto._names_primitive is not None
+def test_password_protected_key_is_opened_once_by_manager():
+    key = fscryptography.generate(password="correct horse")
+    manager = Manager(key, password="correct horse")
+    assert manager._names_primitive is not None
+    assert manager.export_key() == key
+    manager.close()
+
+
+def test_manager_change_key_replaces_context():
+    first = fscryptography.generate()
+    second = fscryptography.generate()
+    manager = Manager(first)
+    manager.change_key(second)
+    assert manager.export_key() == second
+    manager.close()
+
+
+def test_failed_change_key_preserves_previous_context():
+    first = fscryptography.generate()
+    protected = fscryptography.generate(password="right")
+    manager = Manager(first)
+    with pytest.raises(AuthenticationError):
+        manager.change_key(protected, password="wrong")
+    assert manager.export_key() == first
+    assert manager._names_primitive is not None
+    manager.close()
+
+
+def test_change_key_requires_open_manager():
+    manager = Manager(fscryptography.generate())
+    manager.close()
     with pytest.raises(ClosedInstanceError):
-        crypto._content_primitive
+        manager.change_key(fscryptography.generate())
 
 
-def test_crypto_derive_is_password_protected_generation_alias():
-    master_key = Crypto.derive(text="passphrase")
-    crypto = Crypto(master_key=master_key, password="passphrase")
-    assert crypto._names_primitive is not None
-    crypto.close()
-
-
-def test_crypto_context_manager_closes_on_exception():
-    crypto = Crypto(master_key=Crypto.generate())
+def test_manager_context_manager_closes_on_exception():
+    manager = Manager(fscryptography.generate())
     with pytest.raises(RuntimeError):
-        with crypto:
+        with manager:
             raise RuntimeError("test")
     with pytest.raises(ClosedInstanceError):
-        crypto._content_primitive
+        manager.export_key()
