@@ -366,7 +366,7 @@ def _retire_source(
         transaction.unlink_retained()
         try:
             os.fsync(transaction.directory_fd)
-        except AtomicOperationError as exc:
+        except OSError as exc:
             raise AtomicOperationError(
                 "source was removed, but transaction storage could not be synchronized"
             ) from exc
