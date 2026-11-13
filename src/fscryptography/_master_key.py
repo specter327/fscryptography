@@ -235,6 +235,8 @@ def open_master_key(master_key: str, *, password: str | None = None) -> _KeyMate
         raise FormatError("MasterKey header length is invalid")
     if payload_length > payload_limit:
         raise FormatError("MasterKey payload exceeds the size limit")
+    if mode == _MODE_PASSWORD and payload_length < _TAG_LENGTH:
+        raise FormatError("protected MasterKey payload is shorter than its AEAD tag")
     if len(binary) != header_length + payload_length:
         raise FormatError("MasterKey total length does not match its header")
 
