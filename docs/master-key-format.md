@@ -98,7 +98,7 @@ El payload es el resultado de AES-256-GCM aplicado al payload lógico:
 - El resultado de AES-GCM incluye el tag de autenticación de 16 bytes.
 - `payload_length` incluye ciphertext y tag.
 
-La contraseña no se almacena. La API recibe texto y su codificación binaria propuesta es UTF-8 estricto, sin normalización Unicode implícita. La política propuesta de Argon2id, el límite de contraseña y los límites de entrada están especificados en [Política de Argon2id y límites de apertura](argon2id-policy.md). El parser debe validar el perfil admitido y todos los límites antes de ejecutar la KDF.
+La contraseña no se almacena. La API recibe texto y su codificación binaria es UTF-8 estricto, sin normalización Unicode implícita. La política normativa de Argon2id, el límite de contraseña y los límites de entrada están especificados en [Política de Argon2id y límites de apertura](argon2id-policy.md). El parser debe validar el perfil admitido y todos los límites antes de ejecutar la KDF.
 
 ## Reglas de parsing
 
@@ -157,8 +157,11 @@ Base64 no es cifrado. El modo aleatorio debe protegerse como una credencial secr
 - Pruebas ejecutables de layout, framing, AAD, autenticación, alteraciones y truncamientos en `tests/master_key_format/test_master_key_format_vectors.py`.
 - Los keysets de estos vectores son bytes opacos sintéticos, no keysets Tink válidos. Las pruebas no sustituyen la integración de keysets ni un parser productivo.
 
+**Aprobado como contrato normativo v1:**
+- Límites de entrada y contraseña definidos en [la política de Argon2id](argon2id-policy.md).
+- Perfil Argon2id v1 y rechazo de cualquier parámetro distinto del perfil aprobado antes de ejecutar la KDF.
+
 **Pendiente antes de implementar la gestión productiva de claves:**
-- Confirmación contractual de los límites de entrada y contraseña definidos en [la política de Argon2id](argon2id-policy.md); el perfil criptográfico Argon2id v1 ya está aprobado.
 - Perfil AEAD concreto para nombres y pruebas de compatibilidad del backend.
 - Vectores binarios golden definitivos y pruebas multiplataforma.
 - Política de versiones y migración más allá de v1.
