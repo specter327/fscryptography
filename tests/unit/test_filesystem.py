@@ -192,12 +192,12 @@ def test_encrypt_syncs_destination_before_removing_source(manager, tmp_path, mon
     monkeypatch.setattr(_filesystem, "_sync_parent_directory", sync_parent)
     manager.file.encrypt(source)
 
-    assert calls == [
-        (True, True),
-        (False, True),
-        (False, True),
-        (False, True),
-    ]
+    expected_calls = (
+        [(True, True), (False, True)]
+        if os.name == "nt"
+        else [(True, True), (False, True), (False, True), (False, True)]
+    )
+    assert calls == expected_calls
 
 
 def test_encrypt_preserves_source_when_destination_sync_fails(manager, tmp_path, monkeypatch):
@@ -223,7 +223,8 @@ def test_encrypt_reports_sync_failure_after_source_removal(manager, tmp_path, mo
     def fail_after_source_unlink(parent):
         nonlocal calls
         calls += 1
-        if calls == 4:
+        failure_call = 2 if os.name == "nt" else 4
+        if calls == failure_call:
             raise AtomicOperationError("injected transaction-directory sync failure")
 
     monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_after_source_unlink)
@@ -248,6 +249,7 @@ def test_directory_rename_syncs_parent(manager, tmp_path, monkeypatch):
 
     assert calls == [tmp_path]
 
+@pytest.mark.skipif(os.name == "nt", reason="private quarantine is not enabled for inherited Windows ACLs")
 def test_source_replacement_during_retirement_is_restored(manager, tmp_path, monkeypatch):
     source = tmp_path / "replacement.txt"
     retained_original = tmp_path / "original-retained.txt"
@@ -273,6 +275,7 @@ def test_source_replacement_during_retirement_is_restored(manager, tmp_path, mon
     )
 
 
+@pytest.mark.skipif(os.name == "nt", reason="private quarantine is not enabled for inherited Windows ACLs")
 def test_recovery_inspection_reports_retained_source(manager, tmp_path, monkeypatch):
     source = tmp_path / "interrupted.txt"
     source.write_bytes(b"source retained for recovery")
