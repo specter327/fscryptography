@@ -68,4 +68,4 @@ Los errores de argumentos conservan TypeError o ValueError; los errores ordinari
 
 ## Pendiente
 
-Definir el tipo exacto de retorno de Crypto.generate()/Crypto.derive() y el contenedor MasterKey en la implementación; soporte de PathLike; normalización de new_extension; comportamiento ante operaciones repetidas; concurrencia y uso desde múltiples hilos/tareas. La política de contraseña, el algoritmo de protección AEAD del contenedor y la jerarquía de errores ya están definidos documentalmente.
+Definir si Crypto.generate() y Crypto.derive() se implementan como métodos estáticos o de clase; soporte de PathLike; normalización de new_extension; comportamiento ante operaciones repetidas; concurrencia y uso desde múltiples hilos/tareas. Ambas funciones devuelven un contenedor MasterKey.
