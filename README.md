@@ -196,13 +196,26 @@ from pathlib import Path
 directory = Path("proyecto-privado")
 
 with fscryptography.Manager(key=master_key) as manager:
+    # Captura las entradas existentes antes de la transformación.
+    # Ejecuta este ejemplo sin modificaciones concurrentes en el padre.
+    parent = directory.parent
+    previous_entries = {item.name for item in parent.iterdir()}
+
     manager.dir.encrypt(directory)
-    # El directorio cambia a un nombre codificado.
-    # Usa la ruta resultante real para revertir la transformación:
-    encrypted_directory = next(
-        item for item in directory.parent.iterdir()
-        if item.name.startswith("~1")
-    )
+
+    # La API transforma el nombre in-place y devuelve None.
+    # Identifica la nueva entrada comparando el estado anterior y posterior.
+    new_entries = [
+        parent / name
+        for name in (item.name for item in parent.iterdir())
+        if name not in previous_entries
+    ]
+    if len(new_entries) != 1:
+        raise RuntimeError(
+            "No se pudo identificar de forma inequívoca el directorio cifrado"
+        )
+
+    encrypted_directory = new_entries[0]
     manager.dir.decrypt(encrypted_directory)
     # Restaura el nombre original.
 ```
