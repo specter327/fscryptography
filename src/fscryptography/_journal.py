@@ -137,17 +137,18 @@ class Transaction:
         self.data = data
         self.parent_fd = os.dup(parent_fd) if parent_fd is not None else None
         self.directory_fd: int | None = None
-        if self.parent_fd is not None:
-            self.directory_fd = os.open(
-                directory.name,
-                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
-                dir_fd=self.parent_fd,
-            )
-        self._io_directory = (
-            Path(f"/proc/self/fd/{self.directory_fd}")
-            if self.directory_fd is not None
-            else directory
-        )
+        try:
+            if self.parent_fd is not None:
+                self.directory_fd = os.open(
+                    directory.name,
+                    os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+                    dir_fd=self.parent_fd,
+                )
+        except BaseException:
+            if self.parent_fd is not None:
+                os.close(self.parent_fd)
+                self.parent_fd = None
+            raise
 
     @classmethod
     def begin(cls, parent: Path, operation: str, source_name: str, destination_name: str,
@@ -192,16 +193,27 @@ class Transaction:
                 _sync_directory(parent)
         except Exception:
             # Preserve any directory that may contain a partially durable journal.
+            transaction.close()
             raise
         return transaction
 
     @property
     def result_path(self) -> Path:
-        return self._io_directory / "result"
+        if self.directory_fd is not None:
+            raise RuntimeError("descriptor-anchored transactions do not expose pathname results")
+        return self.directory / "result"
 
     @property
     def retained_path(self) -> Path:
-        return self._io_directory / "source"
+        if self.directory_fd is not None:
+            raise RuntimeError("descriptor-anchored transactions do not expose pathname entries")
+        return self.directory / "source"
+
+    def open_result(self) -> int:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+        if self.directory_fd is not None:
+            return os.open("result", flags, 0o600, dir_fd=self.directory_fd)
+        return os.open(self.result_path, flags, 0o600)
 
     def stat_result(self) -> os.stat_result:
         if self.directory_fd is not None:
@@ -242,7 +254,7 @@ class Transaction:
     def _persist(self) -> None:
         raw = _encode(self.data)
         temporary_name = ".journal-" + secrets.token_hex(8)
-        temporary = self._io_directory / temporary_name
+        temporary = self.directory / temporary_name
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
         if self.directory_fd is not None:
             fd = os.open(temporary_name, flags, 0o600, dir_fd=self.directory_fd)
