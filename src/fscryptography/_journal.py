@@ -290,98 +290,121 @@ def _lstat_identity(path: Path):
 
 
 def inspect(parent: str | os.PathLike[str]) -> tuple[RecoveryRecord, ...]:
-    """Inspect transaction directories without modifying any filesystem entry."""
+    """Inspect journals using directory descriptors; never follow transaction symlinks."""
     root = Path(os.path.abspath(os.fspath(parent)))
-    root_info = root.lstat()
-    if stat.S_ISLNK(root_info.st_mode) or not stat.S_ISDIR(root_info.st_mode):
-        raise NotADirectoryError("recovery inspection requires a real directory")
-    records: list[RecoveryRecord] = []
-    for entry in sorted(root.iterdir(), key=lambda item: item.name):
-        if not entry.name.startswith(_PREFIX):
-            continue
-        transaction_id = entry.name[len(_PREFIX):]
-        if not _ID.fullmatch(transaction_id):
-            records.append(RecoveryRecord(transaction_id, None, None, "corrupt", detail="invalid transaction directory name"))
-            continue
-        try:
-            entry_info = entry.lstat()
-            if not stat.S_ISDIR(entry_info.st_mode) or stat.S_ISLNK(entry_info.st_mode):
-                raise ValueError("transaction entry is not a real directory")
-            journal = entry / "journal.json"
-            journal_info = journal.lstat()
-            if not stat.S_ISREG(journal_info.st_mode) or stat.S_ISLNK(journal_info.st_mode) or journal_info.st_size > _MAX_RECORD:
-                raise ValueError("journal is not a bounded regular file")
-            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-            fd = os.open(journal, flags)
-            opened_info = os.fstat(fd)
-            if not stat.S_ISREG(opened_info.st_mode) or _identity(opened_info) != _identity(journal_info):
-                os.close(fd)
-                raise ValueError("journal changed during inspection")
-            with os.fdopen(fd, "rb") as stream:
-                raw = stream.read(_MAX_RECORD + 1)
-            data = _decode(raw, transaction_id, root_info)
-            if data["parent_identity"] != _identity(root_info):
-                records.append(RecoveryRecord(
-                    transaction_id, data["operation"], data["state"], "ambiguous",
-                    data["source_name"], data["destination_name"], data["temporary_name"],
-                    "parent directory identity mismatch",
-                ))
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    root_fd = os.open(root, flags)
+    try:
+        root_info = os.fstat(root_fd)
+        if not stat.S_ISDIR(root_info.st_mode):
+            raise NotADirectoryError("recovery inspection requires a real directory")
+        records: list[RecoveryRecord] = []
+        for entry_name in sorted(os.listdir(root_fd)):
+            if not entry_name.startswith(_PREFIX):
                 continue
-            if data["parent_identity"]["inode"] == 0 or data["source_identity"]["inode"] == 0:
-                records.append(RecoveryRecord(
-                    transaction_id, data["operation"], data["state"], "ambiguous",
-                    data["source_name"], data["destination_name"], data["temporary_name"],
-                    "filesystem identity is not verifiable on this platform",
-                ))
+            transaction_id = entry_name[len(_PREFIX):]
+            if not _ID.fullmatch(transaction_id):
+                records.append(RecoveryRecord(transaction_id, None, None, "corrupt", detail="invalid transaction directory name"))
                 continue
-            source = root / data["source_name"]
-            destination = root / data["destination_name"]
-            source_kind, source_id = _lstat_identity(source)
-            dest_kind, dest_id = _lstat_identity(destination)
-            temp_kind, temp_id = ("missing", None)
-            if data["temporary_name"] is not None:
-                temp_kind, temp_id = _lstat_identity(entry / "result")
-            retained_kind, retained_id = ("missing", None)
-            if data["operation"].startswith("file_"):
-                retained_kind, retained_id = _lstat_identity(entry / "source")
-            expected_source = data["source_identity"]
-            expected_result = data["result_identity"]
-            classification = "ambiguous"
-            if (
-                source_kind in {"symlink", "other"}
-                or dest_kind in {"symlink", "other"}
-                or temp_kind in {"symlink", "other"}
-                or retained_kind in {"symlink", "other"}
-            ):
+            entry_fd = None
+            journal_fd = None
+            try:
+                entry_fd = os.open(
+                    entry_name,
+                    os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+                    dir_fd=root_fd,
+                )
+                entry_info = os.fstat(entry_fd)
+                if not stat.S_ISDIR(entry_info.st_mode):
+                    raise ValueError("transaction entry is not a real directory")
+                journal_info = os.stat("journal.json", dir_fd=entry_fd, follow_symlinks=False)
+                if not stat.S_ISREG(journal_info.st_mode) or journal_info.st_size > _MAX_RECORD:
+                    raise ValueError("journal is not a bounded regular file")
+                journal_fd = os.open("journal.json", os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0), dir_fd=entry_fd)
+                opened_info = os.fstat(journal_fd)
+                if not stat.S_ISREG(opened_info.st_mode) or _identity(opened_info) != _identity(journal_info):
+                    raise ValueError("journal changed during inspection")
+                with os.fdopen(journal_fd, "rb") as stream:
+                    journal_fd = None
+                    raw = stream.read(_MAX_RECORD + 1)
+                data = _decode(raw, transaction_id, root_info)
+                if data["parent_identity"] != _identity(root_info):
+                    records.append(RecoveryRecord(
+                        transaction_id, data["operation"], data["state"], "ambiguous",
+                        data["source_name"], data["destination_name"], data["temporary_name"],
+                        "parent directory identity mismatch",
+                    ))
+                    continue
+                if data["parent_identity"]["inode"] == 0 or data["source_identity"]["inode"] == 0:
+                    records.append(RecoveryRecord(
+                        transaction_id, data["operation"], data["state"], "ambiguous",
+                        data["source_name"], data["destination_name"], data["temporary_name"],
+                        "filesystem identity is not verifiable on this platform",
+                    ))
+                    continue
+
+                def identity_at(directory_fd: int, name: str):
+                    try:
+                        info = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                    except FileNotFoundError:
+                        return "missing", None
+                    if stat.S_ISLNK(info.st_mode):
+                        return "symlink", None
+                    kind = "regular" if stat.S_ISREG(info.st_mode) else "directory" if stat.S_ISDIR(info.st_mode) else "other"
+                    return kind, _identity(info)
+
+                source_kind, source_id = identity_at(root_fd, data["source_name"])
+                dest_kind, dest_id = identity_at(root_fd, data["destination_name"])
+                temp_kind, temp_id = ("missing", None)
+                if data["temporary_name"] is not None:
+                    temp_kind, temp_id = identity_at(entry_fd, "result")
+                retained_kind, retained_id = ("missing", None)
+                if data["operation"].startswith("file_"):
+                    retained_kind, retained_id = identity_at(entry_fd, "source")
+                expected_source = data["source_identity"]
+                expected_result = data["result_identity"]
                 classification = "ambiguous"
-            elif data["operation"].startswith("dir_"):
-                if source_kind == "directory" and source_id == expected_source and dest_kind == "missing":
-                    classification = "prepared_no_output" if data["state"] == "prepared" else "ambiguous"
-                elif source_kind == "missing" and dest_kind == "directory" and dest_id == expected_source:
-                    classification = "source_removed" if data["state"] in {"source_removed", "complete"} else "published_source_missing"
-            else:
-                if retained_kind != "missing":
-                    if (
-                        retained_kind == "regular"
-                        and retained_id == expected_source
-                        and source_kind == "missing"
-                        and dest_kind == "regular"
-                        and expected_result is not None
-                        and dest_id == expected_result
-                    ):
-                        classification = "source_retained"
-                    else:
-                        classification = "ambiguous"
-                elif source_kind == "regular" and source_id == expected_source and dest_kind == "missing" and temp_kind == "missing":
-                    classification = "prepared_no_output" if data["state"] == "prepared" else "ambiguous"
-                elif source_kind == "regular" and source_id == expected_source and dest_kind == "missing" and temp_kind == "regular":
-                    classification = "result_ready" if expected_result is not None and temp_id == expected_result else "result_incomplete_or_unverified"
-                elif dest_kind == "regular" and expected_result is not None and dest_id == expected_result and source_kind == "regular" and source_id == expected_source:
-                    classification = "published_source_present"
-                elif dest_kind == "regular" and expected_result is not None and dest_id == expected_result and source_kind == "missing":
-                    classification = "source_removed" if data["state"] in {"source_removed", "complete"} else "published_source_missing"
-            records.append(RecoveryRecord(transaction_id, data["operation"], data["state"], classification,
-                                          data["source_name"], data["destination_name"], data["temporary_name"]))
-        except Exception as exc:
-            records.append(RecoveryRecord(transaction_id, None, None, "corrupt", detail=str(exc)))
-    return tuple(records)
+                if (
+                    source_kind in {"symlink", "other"}
+                    or dest_kind in {"symlink", "other"}
+                    or temp_kind in {"symlink", "other"}
+                    or retained_kind in {"symlink", "other"}
+                ):
+                    classification = "ambiguous"
+                elif data["operation"].startswith("dir_"):
+                    if source_kind == "directory" and source_id == expected_source and dest_kind == "missing":
+                        classification = "prepared_no_output" if data["state"] == "prepared" else "ambiguous"
+                    elif source_kind == "missing" and dest_kind == "directory" and dest_id == expected_source:
+                        classification = "source_removed" if data["state"] in {"source_removed", "complete"} else "published_source_missing"
+                else:
+                    if retained_kind != "missing":
+                        if (
+                            retained_kind == "regular" and retained_id == expected_source
+                            and source_kind == "missing" and dest_kind == "regular"
+                            and expected_result is not None and dest_id == expected_result
+                        ):
+                            classification = "source_retained"
+                        else:
+                            classification = "ambiguous"
+                    elif source_kind == "regular" and source_id == expected_source and dest_kind == "missing" and temp_kind == "missing":
+                        classification = "prepared_no_output" if data["state"] == "prepared" else "ambiguous"
+                    elif source_kind == "regular" and source_id == expected_source and dest_kind == "missing" and temp_kind == "regular":
+                        classification = "result_ready" if expected_result is not None and temp_id == expected_result else "result_incomplete_or_unverified"
+                    elif dest_kind == "regular" and expected_result is not None and dest_id == expected_result and source_kind == "regular" and source_id == expected_source:
+                        classification = "published_source_present"
+                    elif dest_kind == "regular" and expected_result is not None and dest_id == expected_result and source_kind == "missing":
+                        classification = "source_removed" if data["state"] in {"source_removed", "complete"} else "published_source_missing"
+                records.append(RecoveryRecord(
+                    transaction_id, data["operation"], data["state"], classification,
+                    data["source_name"], data["destination_name"], data["temporary_name"],
+                ))
+            except Exception as exc:
+                records.append(RecoveryRecord(transaction_id, None, None, "corrupt", detail=str(exc)))
+            finally:
+                if journal_fd is not None:
+                    os.close(journal_fd)
+                if entry_fd is not None:
+                    os.close(entry_fd)
+        return tuple(records)
+    finally:
+        os.close(root_fd)
