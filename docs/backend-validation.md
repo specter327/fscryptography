@@ -59,9 +59,9 @@ Requisitos:
 - Variante Argon2id (`Type.ID`).
 - Salt aleatorio único por contenedor.
 - Parámetros y versión guardados en el contenedor.
-- Validación de límites de parámetros antes de ejecutar Argon2id.
+- Validación estricta del perfil antes de ejecutar Argon2id.
 - Longitud de salida fija de 32 bytes.
-- Parámetros de coste finales pendientes de benchmark en hardware objetivo y de establecer límites contra entradas maliciosas.
+- Perfil de producción v1 aprobado: versión 19, memory_cost 65.536 KiB, time_cost 3 y parallelism 1. El benchmark y las mediciones RSS del equipo de referencia están registrados en [Benchmark reproducible de Argon2id](argon2id-benchmark.md). Los límites de entrada y contraseña aún requieren confirmación contractual.
 
 Los valores predeterminados de `PasswordHasher` no se adoptan automáticamente como parámetros normativos de fscryptography.
 
@@ -90,7 +90,7 @@ Cobertura:
 
 **Resultado observado — GitHub Actions Run 5:** [ejecución](https://github.com/specter327/fscryptography/actions/runs/43355002151), commit `94270e5250c2c2d8f50fbb078ec51e87613a6802`, conclusión `success`. Los ocho jobs de la matriz combinada finalizaron correctamente: cuatro jobs Tink Streaming AEAD y cuatro jobs de protección MasterKey. Los cuatro jobs MasterKey aprobaron seis tests cada uno (24 tests en total), con Python 3.10.22, 3.11.18, 3.12.16 y 3.13.18; en todos se instalaron `argon2-cffi 25.1.0` y `cryptography 46.0.7` sobre Linux x86_64/glibc 2.43.
 
-Los parámetros de Argon2id usados por esta prueba son deliberadamente modestos (`time_cost=1`, `memory_cost=8192 KiB`, `parallelism=1`) para una ejecución rápida en CI. **No son parámetros normativos ni recomendación de producción.** Los parámetros de producción, sus límites de parsing y la política frente a entradas hostiles siguen pendientes de benchmark y diseño.
+Los parámetros de Argon2id usados por esta prueba son deliberadamente modestos (`time_cost=1`, `memory_cost=8192 KiB`, `parallelism=1`) para una ejecución rápida en CI. **No son parámetros normativos ni recomendación de producción.** El perfil de producción v1 está aprobado por separado (Argon2id v19, 65.536 KiB, 3, p=1); sus límites de parsing y la política frente a entradas hostiles siguen sujetos a las decisiones pendientes indicadas en [la política Argon2id](argon2id-policy.md).
 
 El workflow instala `argon2-cffi>=23.1,<26` y `cryptography>=42,<47`, registra las versiones efectivas y ejecuta la prueba en Python 3.10–3.13. Resultado: los cuatro jobs finalizaron correctamente con seis tests aprobados por entorno.
 
