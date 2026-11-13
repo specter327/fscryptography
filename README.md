@@ -4,7 +4,7 @@
 
 Proporciona una interfaz de alto nivel basada en rutas, con procesamiento autenticado y segmentado de archivos. Su diseño es autónomo: no depende de herramientas de exploración de recursos ni de aplicaciones concretas.
 
-> **Estado del proyecto:** implementación inicial en curso. Están implementados el contenedor MasterKey v1, el codec de nombres, la cabecera binaria de archivo v1.0 y las operaciones `Manager.file` / `Manager.dir` sobre rutas reales. Las operaciones de contenido usan Tink Streaming AEAD y temporales privados; la publicación no-replace usa `renameat2(RENAME_NOREPLACE)` en GNU/Linux y `os.rename` en Windows. En GNU/Linux también se sincroniza el directorio padre después de publicar y retirar recursos. El journal de recuperación, la durabilidad verificable en Windows y la matriz NTFS/ext4 todavía requieren trabajo y validación.
+> **Estado del proyecto:** implementación inicial en curso. Están implementados el contenedor MasterKey v1, el codec de nombres, la cabecera binaria de archivo v1.0 y las operaciones `Manager.file` / `Manager.dir` sobre rutas reales. Las operaciones de contenido usan Tink Streaming AEAD y temporales privados; la publicación no-replace usa `renameat2(RENAME_NOREPLACE)` en GNU/Linux y `os.rename` en Windows. En GNU/Linux también se sincroniza el directorio padre después de publicar y retirar recursos. El protocolo de journal persistente ya está especificado, pero todavía no está implementado.
 
 ## Alcance
 
@@ -27,7 +27,7 @@ fscryptography opera sobre rutas y no depende de fsresource-tree. Puede utilizar
 
 ## Documentación
 
-La API pública expone `fscryptography.generate()` y `fscryptography.Manager(key=...)`, con operaciones `manager.file.encrypt/decrypt()` y `manager.dir.encrypt/decrypt()`. La [documentación técnica](docs/index.md) contiene el alcance detallado, arquitectura, diseño criptográfico, gestión de claves, formatos, operaciones atómicas, API, errores, modelo de seguridad y compatibilidad.
+La API pública expone `fscryptography.generate()` y `fscryptography.Manager(key=...)`, con operaciones `manager.file.encrypt/decrypt()` y `manager.dir.encrypt/decrypt()`. La [documentación técnica](docs/index.md) contiene el alcance detallado, arquitectura, diseño criptográfico, gestión de claves, formatos, operaciones atómicas, protocolo de recuperación, API, errores, modelo de seguridad y compatibilidad.
 
 ## Estado de desarrollo
 
@@ -35,7 +35,8 @@ El trabajo se realizará en este orden:
 
 1. Ampliar vectores golden, pruebas negativas y mutación de formatos.
 2. Validar el comportamiento en Windows/NTFS y GNU/Linux/ext4 reales.
-3. Completar journal de recuperación, durabilidad multiplataforma y pruebas de concurrencia.
-4. Consolidar la documentación, distribución y publicación en PyPI.
+3. Integrar el journal persistente y la inspección explícita de operaciones interrumpidas; después diseñar resolución segura.
+4. Completar durabilidad multiplataforma y pruebas de concurrencia.
+5. Consolidar la documentación, distribución y publicación en PyPI.
 
 No debe interpretarse la especificación como evidencia de que las funciones ya están implementadas.
