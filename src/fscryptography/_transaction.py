@@ -53,12 +53,16 @@ class Transaction:
             return os.stat(self.result_name, dir_fd=self.directory_fd, follow_symlinks=False)
         return self.result_path.lstat()
 
+    def mark_result_published(self) -> None:
+        """Disable cleanup after the temporary entry has been renamed to its destination."""
+        self._result_created = False
+
     def rename_result_to(self, parent_fd: int, destination_name: str) -> None:
         if self.directory_fd is None:
             raise RuntimeError("transaction is not descriptor-anchored")
         from ._directory import _renameat2
         _renameat2(self.directory_fd, self.result_name, parent_fd, destination_name)
-        self._result_created = False
+        self.mark_result_published()
 
     def unlink_retained(self) -> None:
         if self.directory_fd is not None:
@@ -82,8 +86,8 @@ class Transaction:
         if self._closed:
             return
         self._closed = True
-        # Normal exception paths remove only the result entry created by this
-        # operation. Abrupt termination bypasses this cleanup by definition.
+        # Normal exception paths remove an unpublished result. Once publication
+        # succeeds, the original temporary name is no longer ours to clean up.
         if self._result_created:
             try:
                 if self.directory_fd is not None:
