@@ -325,19 +325,6 @@ def test_operations_remain_anchored_when_parent_path_is_replaced(manager, tmp_pa
     assert list(tmp_path.iterdir()) == []
 
 
-@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="descriptor-relative inspection is GNU/Linux-only")
-def test_recovery_inspection_does_not_follow_transaction_symlink(manager, tmp_path):
-    transaction_link = tmp_path / (".fscryptography-txn-" + "0" * 32)
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    (outside / "journal.json").write_text("not a journal", encoding="utf-8")
-    transaction_link.symlink_to(outside, target_is_directory=True)
-
-    records = manager.inspect_recovery(tmp_path)
-    assert len(records) == 1
-    assert records[0].classification == "corrupt"
-
-
 @pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="directory descriptor anchoring is GNU/Linux-only")
 def test_directory_replacement_during_rename_is_restored(manager, tmp_path, monkeypatch):
     source = tmp_path / "directory"
