@@ -9,7 +9,8 @@ El proyecto usa el backend PEP 517 de setuptools y el layout `src/`. El nombre d
 - Python mínimo: 3.11.
 - Dependencias de ejecución: Tink, argon2-cffi y cryptography.
 - `py.typed` se incluye en el wheel para declarar el paquete como tipado (PEP 561).
-- `MANIFEST.in` incorpora la documentación Markdown al sdist.
+- `MANIFEST.in` incorpora la licencia y la documentación Markdown al sdist.
+- La metadata declara `LicenseRef-Proprietary` y empaqueta `LICENSE` mediante PEP 639.
 
 ## Construcción local
 
@@ -62,7 +63,7 @@ Para el primer registro del nombre en PyPI, configura un **pending publisher** s
 
 ### Secuencia de release
 
-1. Seleccionar y documentar la licencia del proyecto; el paquete no debe publicarse sin una licencia elegida explícitamente.
+1. Confirmar que el titular y el aviso de copyright de `LICENSE` son correctos para la titularidad legal del proyecto.
 2. Actualizar `project.version` en `pyproject.toml` y `__version__` en `src/fscryptography/__init__.py` al mismo valor.
 3. Actualizar notas de versión y validar el cambio mediante CI.
 4. Crear una etiqueta anotada `vX.Y.Z` que apunte al commit integrado.
@@ -74,7 +75,7 @@ PyPI no permite reemplazar un archivo ya publicado para una misma versión. Si u
 
 ## Condiciones previas a la primera publicación
 
-- [ ] Elegir la licencia y añadir el archivo de licencia y los metadatos SPDX correspondientes.
+- [ ] Verificar la identidad legal del titular reflejada en el aviso de copyright.
 - [ ] Configurar los dos Trusted Publishers y los GitHub Environments.
 - [ ] Confirmar que el nombre `fscryptography` está disponible en PyPI.
 - [ ] Ejecutar el flujo completo en TestPyPI.
