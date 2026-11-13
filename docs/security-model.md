@@ -24,7 +24,7 @@ La implementación utiliza primitivas de bibliotecas criptográficas establecida
 - Cabeceras versionadas y autenticadas como AAD para contenido.
 - Validación estricta de framing, longitudes, flags y versiones del contenedor.
 - El plaintext no se publica como resultado definitivo hasta completar el flujo autenticado.
-- Publicación sin reemplazo, temporales transaccionales, comprobaciones de identidad del origen y journal persistente.
+- Publicación sin reemplazo, temporales hermanos efímeros, comprobaciones de identidad del origen y estado transaccional en memoria.
 - Detección de cambios concurrentes del origen y ciphertext, colisiones de destino, hard links múltiples, symlinks y reparse points Windows.
 - Contextos de claves independientes para nombres y contenido; cada operación conserva una instantánea coherente durante la rotación.
 
@@ -51,7 +51,7 @@ La librería no protege contra eliminación, pérdida o corrupción irrecuperabl
 - Durabilidad ante pérdida de energía, fallo de kernel, caché del dispositivo o hardware defectuoso.
 - Filtración de secretos en memoria, volcados, swap, depuradores o logs del consumidor.
 - Ataques de denegación de servicio mediante recursos enormes o filesystem saturado.
-- Manipulación, eliminación o retención maliciosa de journals y temporales por actores con permisos suficientes.
+- Manipulación, sustitución o retención maliciosa de temporales por actores con permisos suficientes.
 
 ## Contraseñas y memoria
 
@@ -59,9 +59,9 @@ El perfil protegido MasterKey v1 utiliza Argon2id versión 19, memoria 65.536 Ki
 
 Python no garantiza borrado seguro de secretos. close() invalida el gestor y libera referencias; no revoca primitivas ya capturadas por operaciones en curso ni garantiza sobrescritura física de memoria.
 
-## Integridad y recuperación
+## Integridad y estado transaccional
 
-inspect_recovery() es de solo lectura. Clasifica evidencia; no restaura, elimina ni decide automáticamente qué recurso conservar. Las pruebas de terminación abrupta cubren estados del journal en GNU/Linux, pero no simulan pérdida de energía ni fallos de kernel/dispositivo. La matriz de Windows no equivale a la validación de todos los escenarios de crash recovery en Windows.
+El estado transaccional solo existe en memoria. No hay journal persistente, inspección posterior ni recuperación automática. La terminación abrupta puede dejar temporales de resultado o de staging del origen en el directorio padre; la librería no los identifica ni los elimina en una ejecución posterior. El consumidor debe evaluar manualmente esos residuos, verificando identidad y contenido antes de cualquier eliminación o restauración. Los tests de ejecución normal no equivalen a pruebas de pérdida de energía ni a garantías de durabilidad física.
 
 ## No objetivos
 
