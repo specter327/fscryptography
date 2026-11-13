@@ -11,7 +11,6 @@ def _transaction(tmp_path):
         "file_encrypt",
         "source.txt",
         "destination.fscrypt",
-        None,
     )
 
 
