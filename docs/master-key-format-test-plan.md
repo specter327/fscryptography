@@ -12,7 +12,9 @@ Las pruebas se dividirán entre:
 
 ## Fixtures y vectores
 
-La suite deberá mantener vectores golden independientes de la implementación:
+Se incorporaron vectores golden iniciales en `tests/master_key_format/fixtures/master_key_v1_vectors.json` y pruebas ejecutables en `tests/master_key_format/test_master_key_format_vectors.py`. Los vectores son independientes de cualquier parser productivo. Los bytes de keyset son marcadores sintéticos opacos y no son Protobuf Tink válido; los parámetros Argon2id son deliberadamente modestos y exclusivos de pruebas.
+
+La suite deberá ampliar y mantener vectores golden independientes de la implementación:
 - Contenedor aleatorio v1 válido con dos keysets de prueba válidos.
 - Contenedor protegido v1 válido con parámetros KDF de fixture deliberadamente modestos, nunca reutilizados como configuración de producción.
 - Cabeceras válidas de ambos modos con sus bytes AAD exactos.
@@ -84,11 +86,16 @@ El fuzzing no sustituye vectores golden ni pruebas criptográficas.
 ## Criterios de aceptación previos a implementación funcional
 
 La fase de especificación del formato se considera cerrada cuando:
-1. Se aprueba el layout binario v1 y sus límites.
-2. Se fijan los límites de contraseña y parámetros Argon2id.
-3. Se aprueba el perfil de nombres y su tipo de keyset.
-4. Se publican vectores golden válidos e inválidos.
-5. Se acuerda el catálogo de errores de parsing/autenticación.
-6. Se define la matriz de plataformas para ejecutar la conformidad.
+1. [x] Se aprueba el layout binario v1 y sus límites.
+2. [ ] Se fijan los límites de contraseña y parámetros Argon2id.
+3. [ ] Se aprueba el perfil de nombres y su tipo de keyset.
+4. [~] Se publican vectores golden iniciales de estructura y envoltura; faltan vectores de keysets Tink válidos e inválidos.
+5. [ ] Se acuerda el catálogo de errores de parsing/autenticación.
+6. [ ] Se define la matriz de plataformas para ejecutar la conformidad.
 
 La implementación funcional de archivos y directorios permanece bloqueada hasta completar esta fase.
+
+
+## Estado de ejecución
+
+Las pruebas de `tests/master_key_format/test_master_key_format_vectors.py` validan el layout aprobado mediante un verificador exclusivo de pruebas. No constituyen el parser productivo ni validan la semántica de keysets Tink. El vector protegido usa Argon2id con coste deliberadamente bajo para que la prueba sea rápida; nunca debe reutilizarse en producción.
