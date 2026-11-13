@@ -195,8 +195,11 @@ Base64 no es cifrado. El modo aleatorio debe protegerse como una credencial secr
 - Marcador `~1` seguido de ciphertext Tink codificado en Base64URL sin padding.
 - Máximo derivado de 156 bytes UTF-8 cuando el límite del componente es 255 bytes. La compatibilidad real y las reglas específicas de cada filesystem aún deben validarse.
 
-**Pendiente antes de implementar la gestión productiva de claves:**
-- Vectores binarios golden definitivos y pruebas de integración con keysets Tink reales.
-- Política de versiones y migración más allá de v1.
+**Estado de implementación:**
+- El parser y generador productivos de MasterKey v1.0 están implementados.
+- Los keysets Tink reales de contenido y nombres se serializan, validan y recuperan mediante la API de Tink.
+- La fachada Crypto utiliza el material recuperado y la integración del codec de nombres está cubierta por pruebas unitarias.
+- Los vectores golden estructurales existentes utilizan keysets sintéticos; ampliar los vectores con keysets Tink válidos y fuzzing/adversarial sigue pendiente.
+- La política de versiones y migración más allá de v1 sigue pendiente.
 
-El layout binario v1.0 está aprobado y cuenta con vectores y pruebas de conformidad estructural. Esto no implica que exista ya un parser productivo ni una implementación funcional de gestión de claves.
+El formato MasterKey v1.0 está aprobado e implementado. Esto no implica que las operaciones de cifrado/descifrado sobre archivos y directorios estén implementadas ni que exista validación multiplataforma sobre NTFS/ext4 reales.
