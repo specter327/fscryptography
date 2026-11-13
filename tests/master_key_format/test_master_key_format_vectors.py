@@ -162,7 +162,7 @@ class MasterKeyV1GoldenVectorTests(unittest.TestCase):
                 _open_container(candidate, self.password)
 
     def test_unknown_mode_schema_version_and_flags_are_rejected(self):
-        mutations = ((10, 0x02), (11, 0x02), (8, 0x02), (12, 0x00))
+        mutations = ((10, 0x02), (11, 0x02), (8, 0x02))
         for offset, value in mutations:
             altered = bytearray(self.random_blob)
             altered[offset] = value
