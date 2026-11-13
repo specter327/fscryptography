@@ -293,6 +293,10 @@ def _retire_source(
             transaction.set_state("source_removed")
             return
         except Exception as exc:
+            if not source_path.exists():
+                raise AtomicOperationError(
+                    "source was removed, but the namespace update could not be synchronized"
+                ) from exc
             raise AtomicOperationError(
                 f"{output_kind} was published but source removal failed"
             ) from exc
