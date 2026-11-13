@@ -32,4 +32,4 @@ No se debe presentar una propuesta como funcionalidad implementada. La implement
 
 ## Estado de madurez
 
-La librería dispone de implementación funcional, formatos v1.0 documentados, pruebas unitarias, integración filesystem en runners ext4/NTFS, CI de dependencias mínimas y distribución wheel/sdist. Continúan pendientes la validación específica de Windows 11 cliente, fuzzing/property-based de parsers, escenarios ampliados de interrupción en Windows, revisión independiente y preparación final de release.
+La librería dispone de implementación funcional, formatos v1.0 documentados, pruebas unitarias, integración filesystem en runners ext4/NTFS, CI de dependencias mínimas y distribución wheel/sdist. Continúan pendientes la validación específica de Windows 11 cliente, fuzzing de larga duración y ampliación del corpus de regresión (ya existen pruebas property-based acotadas), escenarios ampliados de interrupción en Windows, revisión independiente y preparación final de release.

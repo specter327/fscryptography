@@ -70,3 +70,8 @@ No es un filesystem cifrado transparente, gestor de secretos, sistema de interca
 ## Auditoría
 
 No se ha completado una auditoría criptográfica independiente. Las pruebas automatizadas y los resultados CI no equivalen a una auditoría ni certifican ausencia de vulnerabilidades.
+
+
+## Pruebas property-based
+
+Los parsers de cabecera de archivo v1.0 y framing/Base64 de MasterKey disponen de pruebas property-based acotadas con Hypothesis. Estas pruebas buscan excepciones no clasificadas y verifican invariantes de round-trip para datos válidos. No sustituyen fuzzing de larga duración, sanitizadores, pruebas de hardware ni auditoría independiente.
