@@ -75,7 +75,7 @@ Los fixtures criptográficos deben ser reproducibles. La generación aleatoria d
 - Confirmar que una apertura fallida no entrega el primer keyset si falla el segundo.
 - No usar un formato de keyset propio ni exponer keysets a la API pública.
 
-La selección del perfil de nombres debe cerrarse antes de marcar esta matriz como completa.
+El perfil Tink `AES256_GCM` y el keyset `Aead` ya pasaron la prueba de backend en CI. La matriz de integración del contenedor sigue pendiente hasta probar ambos keysets reales dentro del MasterKey.
 
 ## Propiedades y fuzzing
 
@@ -93,7 +93,7 @@ El fuzzing no sustituye vectores golden ni pruebas criptográficas.
 La fase de especificación del formato se considera cerrada cuando:
 1. [x] Se aprueba el layout binario v1 y sus límites.
 2. [x] Se ejecuta el benchmark de referencia y se aprueba el perfil Argon2id v1 (64 MiB / 3 / p=1), junto con los límites normativos de entrada y contraseña de [la política de Argon2id](argon2id-policy.md).
-3. [ ] Se aprueba el perfil de nombres y su tipo de keyset.
+3. [~] Se valida el perfil AEAD de nombres Tink `AES256_GCM` y el tipo `Aead`; faltan aprobación de la codificación del componente y su límite de longitud.
 4. [~] Se publican vectores golden iniciales de estructura y envoltura; faltan vectores de keysets Tink válidos e inválidos.
 5. [ ] Se acuerda el catálogo de errores de parsing/autenticación.
 6. [ ] Se define la matriz de plataformas para ejecutar la conformidad.
