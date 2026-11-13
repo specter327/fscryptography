@@ -210,12 +210,10 @@ class Transaction:
             raise
 
     def finish(self) -> None:
-        # Cleanup is permitted only after the operation has durably completed.
+        # Keep the completed record as durable evidence. Cleanup is intentionally
+        # deferred until a separately specified, identity-safe retention policy exists.
         if self.data["state"] != "complete":
             raise RuntimeError("transaction is not complete")
-        (self.directory / "journal.json").unlink()
-        self.directory.rmdir()
-        _sync_directory(self.parent)
 
 
 def _lstat_identity(path: Path):
