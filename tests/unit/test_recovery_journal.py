@@ -36,7 +36,8 @@ def test_inspection_reports_prepared_transaction_without_mutation(tmp_path):
 def test_inspection_recognizes_verified_result_ready(tmp_path):
     source, destination, transaction = _transaction(tmp_path)
     transaction.result_path.write_bytes(b"encrypted-result")
-    with transaction.result_path.open("rb") as stream:
+    with transaction.result_path.open("ab") as stream:
+        stream.flush()
         os.fsync(stream.fileno())
     transaction.set_result_ready(transaction.result_path.lstat())
 
