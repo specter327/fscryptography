@@ -26,7 +26,7 @@ La implementación debe usar argon2-cffi y Argon2id. No debe implementar la func
 
 ## Política de aceptación de parámetros
 
-Para la primera implementación productiva de v1 se propone una **lista de aceptación estricta de un único perfil**:
+La implementación productiva de v1 debe aplicar una **lista de aceptación estricta de un único perfil aprobado**:
 
 - version == 0x13
 - memory_cost == 65536
@@ -39,7 +39,7 @@ La regla evita que un contenedor manipulado solicite una cantidad arbitraria de 
 
 Los parámetros se autentican como parte de la cabecera AAD, pero **la autenticación no protege contra el coste de una KDF ejecutada antes de verificar el tag**. Por ello, validar el perfil antes de la derivación es obligatorio.
 
-Si en el futuro se necesita admitir otros costes por motivos de compatibilidad o evolución, deberán añadirse perfiles explícitos, versionados documentalmente y sujetos a límites de recursos. No se ampliará la aceptación mediante rangos abiertos.
+Si en el futuro se necesita admitir otros costes por motivos de compatibilidad o evolución, deberán añadirse perfiles explícitos, versionados documentalmente y sujetos a límites de recursos. Esta ampliación requiere una nueva decisión de diseño; no forma parte del contrato v1 aprobado. No se ampliará la aceptación mediante rangos abiertos.
 
 ## Límites de entrada previos a KDF
 
