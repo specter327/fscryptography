@@ -46,13 +46,23 @@ change_key() valida y abre completamente la nueva clave antes de sustituir el co
 
 ## Operaciones sobre recursos
 
+    # Nombre visible: salida document.fscrypt
     manager.file.encrypt(path="document.txt")
-    manager.file.decrypt(path="document.txt.encrypted")
 
+    # Extensión de salida personalizada o sin extensión
+    manager.file.encrypt(path="archive.tar.gz", new_extension=".locked")
+    manager.file.encrypt(path="secret.txt", new_extension="")
+
+    # El nombre completo se cifra con el keyset AEAD de nombres
+    manager.file.encrypt(path="private.txt", encrypt_name=True)
+
+    manager.file.decrypt(path="document.fscrypt")
+
+    # Los directorios solo transforman su propio nombre
     manager.dir.encrypt(path="private-directory")
-    manager.dir.decrypt(path="encrypted-directory")
+    manager.dir.decrypt(path="~1...")
 
-Las operaciones de archivos y directorios son métodos del contexto del gestor y reutilizan las primitivas abiertas. Los directorios transforman exclusivamente su propio nombre; no recorren ni cifran su contenido. Estas operaciones siguen pendientes de implementación.
+Las operaciones son métodos del contexto del gestor y reutilizan las primitivas abiertas. El cifrado de archivos utiliza Tink Streaming AEAD y la cabecera v1.0 autenticada como AAD. La extensión original y la de salida se guardan en metadata autenticada. `new_extension=None` selecciona `.fscrypt`; `""` elimina la extensión visible; un sufijo explícito como `.locked` la sustituye. Con `encrypt_name=True`, se cifra el nombre completo y `new_extension` debe ser `None`. Los directorios transforman exclusivamente su propio nombre; no recorren ni cifran su contenido.
 
 ## Representación de claves
 
@@ -83,6 +93,5 @@ Implementado:
 - close() y administrador de contexto.
 
 Pendiente:
-- manager.file.encrypt() y manager.file.decrypt().
-- manager.dir.encrypt() y manager.dir.decrypt().
-- Formato definitivo de archivo, operaciones sobre rutas y garantías del filesystem.
+- Pruebas de conformidad ampliadas, vectores golden y validación de mutaciones.
+- Validación de atomicidad/no-sobrescritura y round-trip en Windows/NTFS y GNU/Linux/ext4 reales.
