@@ -25,15 +25,15 @@ La primera versión utiliza un único backend criptográfico; no se diseña una 
 
 ## Estado de componentes
 
-- **Implementado:** validación de nombres, codec de nombres Tink, generación/apertura de MasterKey, recuperación de keysets Tink y API pública generate()/Manager, cambio y exportación de clave.
-- **Especificado parcialmente:** formato binario de archivo con cabecera autenticada como AAD y flujo Streaming AEAD directo. La semántica de extensión y el contrato de new_extension siguen pendientes.
-- **Pendiente:** operaciones reales sobre rutas, temporales, publicación sin sobrescritura, rollback y validación en filesystems objetivo.
+- **Implementado:** validación y codec de nombres Tink; generación/apertura de MasterKey; recuperación de keysets; API `generate()`/`Manager`; cambio y exportación de clave; formato binario de archivo v1.0; cifrado/descifrado de archivos con Tink Streaming AEAD; cifrado/descifrado de nombres de archivos y directorios; temporales privados y publicación no-replace en Windows/Linux.
+- **Pendiente de validación de plataforma:** comportamiento real en NTFS y ext4, límites Unicode exactos en Windows, colisiones bajo configuraciones case-sensitive y garantías de durabilidad.
+- **Pendiente de robustecimiento:** sincronización del directorio padre, journal de recuperación abrupta, pruebas de concurrencia/cambios hostiles y preservación de metadatos de filesystem.
 
-## Flujo de cifrado previsto
+## Flujo de cifrado implementado
 
 Validar origen y destino; preparar claves; crear temporal exclusivo en el mismo filesystem; escribir la cabecera de formato y cifrar secuencialmente hacia el temporal; finalizar el flujo autenticado; preparar y validar el nombre de destino; publicar sin reemplazar destinos existentes; retirar el original solo después de confirmar la publicación; limpiar recursos temporales.
 
-## Flujo de descifrado previsto
+## Flujo de descifrado implementado
 
 Reconocer y validar la cabecera; preparar temporal privado; descifrar y autenticar todos los segmentos; validar el cierre; preparar y validar el nombre original; publicar únicamente tras autenticación completa; limpiar temporales y secretos de mejor esfuerzo.
 
