@@ -175,7 +175,7 @@ class MasterKeyV1GoldenVectorTests(unittest.TestCase):
             _open_container(bytes(altered_flags))
 
     def test_header_and_payload_lengths_are_strict(self):
-        for offset, value in ((14, 0x13), (16, 0x00), (19, 0x0C)):
+        for offset, value in ((14, 0x13), (16, 0x01), (19, 0x0C)):
             altered = bytearray(self.random_blob)
             altered[offset] = value
             with self.subTest(offset=offset), self.assertRaises(FormatError):
