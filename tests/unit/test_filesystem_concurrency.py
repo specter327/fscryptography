@@ -216,3 +216,42 @@ def test_windows_source_substitution_during_quarantine_is_never_deleted(
         for item in transaction_dir.iterdir()
     )
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows handle-based retirement")
+def test_windows_replacement_after_handle_open_is_not_deleted(
+    manager, tmp_path, monkeypatch
+):
+    """Replacing the quarantine path after handle validation cannot redirect deletion."""
+    source = tmp_path / "windows-handle-race.bin"
+    source.write_bytes(b"expected source object")
+    real_mark = fscryptography._filesystem._windows_mark_handle_for_deletion
+    real_rename = os.rename
+    moved = tmp_path / "opened-handle-object.bin"
+    replacement_payload = b"replacement at quarantine path"
+    quarantine_paths = []
+
+    def replace_quarantine_then_delete(handle):
+        transaction_dirs = list(tmp_path.glob(".fscryptography-*"))
+        retained = next(
+            entry / "source"
+            for entry in transaction_dirs
+            if (entry / "source").exists()
+        )
+        quarantine_paths.append(retained)
+        real_rename(retained, moved)
+        retained.write_bytes(replacement_payload)
+        return real_mark(handle)
+
+    monkeypatch.setattr(
+        fscryptography._filesystem,
+        "_windows_mark_handle_for_deletion",
+        replace_quarantine_then_delete,
+    )
+
+    manager.file.encrypt(source)
+
+    assert len(quarantine_paths) == 1
+    assert not moved.exists()  # The verified original object was deleted by its handle.
+    assert quarantine_paths[0].read_bytes() == replacement_payload
+    assert not source.exists()
+    assert (tmp_path / "windows-handle-race.fscrypt").is_file()
+
