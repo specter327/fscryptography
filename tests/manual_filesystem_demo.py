@@ -4,11 +4,10 @@ Run from the repository root:
     python tests/manual_filesystem_demo.py
 
 The script creates an isolated temporary workspace inside tests/resources/,
-prints the generated MasterKey and resource details, encrypts/decrypts real
-files and a directory name, then removes the entire workspace even on failure.
+keeps the generated MasterKey in memory, encrypts/decrypts real files and a
+directory name, then removes the entire workspace even on failure.
 
-WARNING: the MasterKey is deliberately printed for this demonstration. Never
-print, log, commit, or share production keys.
+The demonstration never prints or logs key material.
 """
 
 from __future__ import annotations
@@ -145,18 +144,17 @@ def run_demo() -> None:
         log("Detailed original file:")
         describe_file(original_file)
 
-        section("2. GENERATE AND DISPLAY THE MASTER KEY")
+        section("2. GENERATE A MASTER KEY WITHOUT EXPOSING IT")
         master_key = fscryptography.generate()
         require(isinstance(master_key, str) and bool(master_key), "generate() returned a Base64 MasterKey")
-        log("MASTER KEY (Base64) — visible only because this is a disposable demonstration:")
-        log(master_key)
-        log(f"MasterKey characters: {len(master_key)}")
-        log("SECURITY: do not print or disclose real application keys.")
+        log("MasterKey generated in memory; key material is intentionally redacted.")
+        log(f"MasterKey length: {len(master_key)} characters")
 
         with fscryptography.Manager(key=master_key) as manager:
             exported_key = manager.export_key()
             require(exported_key == master_key, "Manager.export_key() matches the generated MasterKey")
-            log(f"Exported MasterKey (Base64): {exported_key}")
+            del exported_key
+            log("MasterKey export verified without printing its value.")
 
             section("3. ENCRYPT A FILE — DEFAULT .fscrypt EXTENSION")
             log("BEFORE encryption:")
