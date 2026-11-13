@@ -212,6 +212,32 @@ def _open_source_at(anchor: DirectoryAnchor, name: str, expected: os.stat_result
         os.close(descriptor)
         raise
 
+
+def _rename_directory_checked(
+    anchor: DirectoryAnchor,
+    source_name: str,
+    destination_name: str,
+    expected: os.stat_result,
+) -> None:
+    """Rename a directory without replacement and verify the moved identity."""
+    anchor.rename_noreplace(source_name, anchor.fd, destination_name)
+    try:
+        moved = anchor.stat(destination_name)
+        if not stat.S_ISDIR(moved.st_mode) or (moved.st_dev, moved.st_ino) != (expected.st_dev, expected.st_ino):
+            raise InvalidPathError("directory identity changed before rename")
+        anchor.sync()
+    except BaseException as exc:
+        try:
+            anchor.rename_noreplace(destination_name, anchor.fd, source_name)
+            anchor.sync()
+        except BaseException as restore_error:
+            raise AtomicOperationError(
+                "directory identity changed during rename; the moved entry could not be restored safely"
+            ) from restore_error
+        if isinstance(exc, InvalidPathError):
+            raise
+        raise AtomicOperationError("directory rename failed verification; original entry was restored") from exc
+
 def _read_exact(stream: BinaryIO, size: int) -> bytes:
     chunks = bytearray()
     while len(chunks) < size:
@@ -585,8 +611,7 @@ class _DirectoryOperations:
                 parent_fd=anchor.fd if anchor is not None else None,
             )
             if anchor is not None:
-                anchor.rename_noreplace(source.name, anchor.fd, destination.name)
-                anchor.sync()
+                _rename_directory_checked(anchor, source.name, destination.name, source_info)
             else:
                 _publish_noreplace(source, destination)
                 _sync_parent_directory(source.parent)
