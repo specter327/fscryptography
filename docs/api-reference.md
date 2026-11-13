@@ -1,7 +1,7 @@
 # API pública
 
 ## Principios
-La API opera sobre rutas del filesystem. No expone cifrado general de bytes ni streams suministrados por el consumidor. Las firmas siguientes son conceptuales hasta cerrar tipos, excepciones y parámetros.
+La API opera sobre rutas del filesystem. No expone cifrado general de bytes ni streams suministrados por el consumidor. Las firmas siguientes describen el contrato público previsto; los tipos concretos de ruta y algunos parámetros opcionales permanecen sujetos a la especificación de cada operación.
 
 ## Generación y derivación
 ```python
@@ -58,7 +58,14 @@ crypto.dir.decrypt(path="encrypted-directory")
 
 Estas operaciones transforman exclusivamente el nombre del directorio.
 
-## Contrato pendiente
-Definir si generate es método estático o de clase; soporte de PathLike; normalización de new_extension; retorno bool frente a excepciones/resultados estructurados; comportamiento ante operaciones repetidas; concurrencia y uso desde múltiples hilos/tareas; normalización Unicode y límites de longitud de contraseña; algoritmo concreto de protección AEAD del contenedor.
+## Retornos y errores
 
-Un booleano por sí solo no comunica causa ni etapa del fallo. La API debe ofrecer errores tipados y no ocultar fallos inesperados.
+Las operaciones file.encrypt(), file.decrypt(), dir.encrypt() y dir.decrypt() devuelven None al completarse correctamente. Los fallos se comunican mediante excepciones tipadas; no se devuelve False como sustituto de una excepción.
+
+Todas las excepciones propias derivan de FsCryptographyError. La jerarquía, la clasificación de fallos y la política de preservación de excepciones estándar se definen en [Errores y excepciones](errors.md).
+
+Los errores de argumentos conservan TypeError o ValueError; los errores ordinarios del filesystem conservan las excepciones estándar de Python cuando sea posible. La contraseña incorrecta y la alteración de un contenedor protegido se presentan como AuthenticationError, sin distinguir públicamente ambos casos.
+
+## Pendiente
+
+Definir el tipo exacto de retorno de Crypto.generate()/Crypto.derive() y el contenedor MasterKey en la implementación; soporte de PathLike; normalización de new_extension; comportamiento ante operaciones repetidas; concurrencia y uso desde múltiples hilos/tareas. La política de contraseña, el algoritmo de protección AEAD del contenedor y la jerarquía de errores ya están definidos documentalmente.
