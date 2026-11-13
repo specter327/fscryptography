@@ -75,6 +75,40 @@ jobs:
       - name: Run package and filesystem tests
         run: python -m pytest -q tests/unit tests/file_format
 
+  backend-cryptography-windows:
+    name: Windows cryptographic backend / Python ${{ matrix.python-version }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+
+      - name: Validate Tink Streaming AEAD
+        run: python tests/backend_validation/test_tink_streaming_aead.py
+
+      - name: Validate filename AEAD
+        run: python tests/backend_validation/test_tink_aead_names.py
+
+      - name: Validate MasterKey protection
+        run: python tests/backend_validation/test_master_key_protection.py
+
+      - name: Validate MasterKey v1.0 golden vectors
+        run: python tests/master_key_format/test_master_key_format_vectors.py
+
   tink-streaming-aead:
     name: Tink Streaming AEAD / Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
