@@ -55,6 +55,8 @@ def validate_extension(extension: str | None, *, allow_none: bool = True) -> str
     if (
         not extension.startswith(".")
         or extension.startswith("..")
+        or "/" in extension
+        or "\\x00" in extension
         or len(extension) < 2
         or any(ord(char) < 0x20 for char in extension)
     ):
