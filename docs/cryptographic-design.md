@@ -21,15 +21,19 @@ Antes de adoptarlo se debe validar:
 Referencias: [Tink](https://github.com/tink-crypto/tink), [Streaming AEAD](https://developers.google.com/tink/streaming-aead), [tipos de clave soportados](https://developers.google.com/tink/supported-key-types).
 
 ## Nombres
-Se prefiere AES-256-GCM con nonce único y autenticación, usando clave distinta de la destinada al contenido. AES-SIV se considera alternativa, pero su determinismo revela igualdad de nombres repetidos bajo una misma clave.
+Se prefiere AES-256-GCM con nonce único y autenticación, usando un keyset independiente del destinado al contenido. AES-SIV se considera alternativa, pero su determinismo revela igualdad de nombres repetidos bajo una misma clave.
 
 ## Separación de claves
-No reutilizar directamente una misma clave AEAD para contenido y nombres. Utilizar keysets independientes o derivación con separación de dominios respaldada por una construcción reconocida. No diseñar una KDF propia.
+El contenedor MasterKey contiene keysets independientes para contenido y nombres. Los keysets se generan independientemente mediante el backend; no se reutiliza directamente una misma clave AEAD para distintos propósitos ni se diseña una KDF propia para separarlos.
 
 ## Nonces y AAD
 La generación y unicidad de nonces debe delegarse al backend. Todo metadato que influya en interpretación o descifrado debe autenticarse como AAD o quedar dentro del formato autenticado.
 
-## KDF
-Argon2id es la KDF seleccionada conceptualmente para contraseñas. Debe conservarse salt, versión y parámetros para reproducir la derivación. Los parámetros de coste predeterminados requieren validación en plataformas objetivo.
+## KDF y protección del contenedor
+Argon2id es la KDF seleccionada para proteger el contenedor de claves cuando el consumidor proporciona una contraseña. La derivación utiliza un salt aleatorio y parámetros almacenados en el propio contenedor. Argon2id produce una clave de envoltura de 256 bits; esta clave protege mediante AEAD los keysets serializados.
+
+La contraseña es necesaria al inicializar Crypto con un contenedor protegido. La contraseña no se almacena. Crypto.generate(password=...) es alias de Crypto.derive(text=...). Crypto.generate() sin contraseña genera un contenedor aleatorio no protegido por contraseña.
+
+El algoritmo AEAD de envoltura, la API concreta y los parámetros de Argon2id requieren validación de dependencias y plataformas. Los campos que describen el contenedor y sus parámetros deben autenticarse. No se implementarán primitivas criptográficas propias.
 
 La criptografía asimétrica para envolver claves queda fuera de la primera versión.
