@@ -21,7 +21,7 @@ _PREFIX = ".fscryptography-txn-"
 _ID = re.compile(r"^[0-9a-f]{32}$")
 _MAX_RECORD = 16 * 1024
 _OPERATIONS = {"file_encrypt", "file_decrypt", "dir_encrypt", "dir_decrypt"}
-_STATES = {"prepared", "result_ready", "published", "source_removed", "complete"}
+_STATES = {"prepared", "result_ready", "published", "source_retained", "source_removed", "complete"}
 _FIELDS = {
     "format", "transaction_id", "operation", "state", "parent_identity",
     "source_name", "destination_name", "temporary_name", "source_identity",
@@ -279,10 +279,18 @@ def inspect(parent: str | os.PathLike[str]) -> tuple[RecoveryRecord, ...]:
             temp_kind, temp_id = ("missing", None)
             if data["temporary_name"] is not None:
                 temp_kind, temp_id = _lstat_identity(entry / "result")
+            retained_kind, retained_id = ("missing", None)
+            if data["operation"].startswith("file_"):
+                retained_kind, retained_id = _lstat_identity(entry / "source")
             expected_source = data["source_identity"]
             expected_result = data["result_identity"]
             classification = "ambiguous"
-            if source_kind in {"symlink", "other"} or dest_kind in {"symlink", "other"} or temp_kind in {"symlink", "other"}:
+            if (
+                source_kind in {"symlink", "other"}
+                or dest_kind in {"symlink", "other"}
+                or temp_kind in {"symlink", "other"}
+                or retained_kind in {"symlink", "other"}
+            ):
                 classification = "ambiguous"
             elif data["operation"].startswith("dir_"):
                 if source_kind == "directory" and source_id == expected_source and dest_kind == "missing":
@@ -290,7 +298,19 @@ def inspect(parent: str | os.PathLike[str]) -> tuple[RecoveryRecord, ...]:
                 elif source_kind == "missing" and dest_kind == "directory" and dest_id == expected_source:
                     classification = "source_removed" if data["state"] in {"source_removed", "complete"} else "published_source_missing"
             else:
-                if source_kind == "regular" and source_id == expected_source and dest_kind == "missing" and temp_kind == "missing":
+                if retained_kind != "missing":
+                    if (
+                        retained_kind == "regular"
+                        and retained_id == expected_source
+                        and source_kind == "missing"
+                        and dest_kind == "regular"
+                        and expected_result is not None
+                        and dest_id == expected_result
+                    ):
+                        classification = "source_retained"
+                    else:
+                        classification = "ambiguous"
+                elif source_kind == "regular" and source_id == expected_source and dest_kind == "missing" and temp_kind == "missing":
                     classification = "prepared_no_output" if data["state"] == "prepared" else "ambiguous"
                 elif source_kind == "regular" and source_id == expected_source and dest_kind == "missing" and temp_kind == "regular":
                     classification = "result_ready" if expected_result is not None and temp_id == expected_result else "result_incomplete_or_unverified"

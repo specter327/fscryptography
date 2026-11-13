@@ -265,6 +265,91 @@ def _sync_parent_directory(parent: Path) -> None:
         ) from exc
 
 
+def _retire_source(
+    source_path: Path,
+    transaction: Transaction,
+    expected: os.stat_result,
+    *,
+    output_kind: str,
+) -> None:
+    """Move the expected source into private transaction storage before unlinking.
+
+    The quarantine entry is deliberately inside the journaled transaction
+    directory, so an interrupted retirement remains visible to recovery
+    inspection. The identity check is performed after the atomic rename.
+    """
+    if os.name == "nt":
+        # Transaction directories currently inherit the parent's Windows ACL.
+        # Until an explicit private ACL is installed, do not treat that location
+        # as a protected quarantine; retain the previous identity-check behavior.
+        current = source_path.lstat()
+        if (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino):
+            raise AtomicOperationError(
+                "source changed before removal; published output and source were preserved"
+            )
+        try:
+            source_path.unlink()
+            _sync_parent_directory(source_path.parent)
+            transaction.set_state("source_removed")
+            return
+        except Exception as exc:
+            if not source_path.exists():
+                raise AtomicOperationError(
+                    "source was removed, but the namespace update could not be synchronized"
+                ) from exc
+            raise AtomicOperationError(
+                f"{output_kind} was published but source removal failed"
+            ) from exc
+
+    retained = transaction.directory / "source"
+    try:
+        _publish_noreplace(source_path, retained)
+    except Exception as exc:
+        raise AtomicOperationError(
+            f"{output_kind} was published but the source could not be retained safely"
+        ) from exc
+
+    try:
+        current = retained.lstat()
+        if (
+            not stat.S_ISREG(current.st_mode)
+            or (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino)
+        ):
+            try:
+                _publish_noreplace(retained, source_path)
+                _sync_parent_directory(source_path.parent)
+                _sync_parent_directory(transaction.directory)
+            except Exception as restore_error:
+                raise AtomicOperationError(
+                    "source identity changed; the unexpected entry remains in transaction storage "
+                    "for explicit recovery inspection"
+                ) from restore_error
+            raise AtomicOperationError(
+                "source identity changed before retirement; the unexpected source entry was restored"
+            )
+
+        # Persist both sides of the cross-directory rename before recording the
+        # retained state. A crash from this point is inspectable via txn/source.
+        _sync_parent_directory(source_path.parent)
+        _sync_parent_directory(transaction.directory)
+        transaction.set_state("source_retained")
+
+        retained.unlink()
+        try:
+            _sync_parent_directory(transaction.directory)
+        except AtomicOperationError as exc:
+            raise AtomicOperationError(
+                "source was removed, but transaction storage could not be synchronized"
+            ) from exc
+        transaction.set_state("source_removed")
+    except AtomicOperationError:
+        raise
+    except Exception as exc:
+        raise AtomicOperationError(
+            "published output remains available; source retirement is incomplete and requires inspection"
+        ) from exc
+
+
 class _FileOperations:
     def __init__(self, manager) -> None:
         self._manager = manager
@@ -333,22 +418,12 @@ class _FileOperations:
             published = True
             _sync_parent_directory(source_path.parent)
             transaction.set_state("published")
-            try:
-                latest = source_path.lstat()
-                if (latest.st_dev, latest.st_ino) != (source_info.st_dev, source_info.st_ino):
-                    raise AtomicOperationError("source changed before removal; both files were preserved")
-                source_path.unlink()
-            except Exception as exc:
-                if isinstance(exc, AtomicOperationError):
-                    raise
-                raise AtomicOperationError("encrypted output was published but source removal failed") from exc
-            try:
-                _sync_parent_directory(source_path.parent)
-            except AtomicOperationError as exc:
-                raise AtomicOperationError(
-                    "source was removed, but the namespace update could not be synchronized"
-                ) from exc
-            transaction.set_state("source_removed")
+            _retire_source(
+                source_path,
+                transaction,
+                source_info,
+                output_kind="encrypted output",
+            )
             transaction.set_state("complete")
             transaction.finish()
         finally:
@@ -404,17 +479,12 @@ class _FileOperations:
             _sync_parent_directory(source_path.parent)
             _sync_parent_directory(transaction.directory)
             transaction.set_state("published")
-            try:
-                latest = source_path.lstat()
-                if (latest.st_dev, latest.st_ino) != (source_info.st_dev, source_info.st_ino):
-                    raise AtomicOperationError("source changed before removal; both files were preserved")
-                source_path.unlink()
-            except Exception as exc:
-                if isinstance(exc, AtomicOperationError):
-                    raise
-                raise AtomicOperationError("plaintext was published but ciphertext removal failed") from exc
-            _sync_parent_directory(source_path.parent)
-            transaction.set_state("source_removed")
+            _retire_source(
+                source_path,
+                transaction,
+                source_info,
+                output_kind="plaintext",
+            )
             transaction.set_state("complete")
             transaction.finish()
         finally:

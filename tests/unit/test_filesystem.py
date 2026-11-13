@@ -192,7 +192,12 @@ def test_encrypt_syncs_destination_before_removing_source(manager, tmp_path, mon
     monkeypatch.setattr(_filesystem, "_sync_parent_directory", sync_parent)
     manager.file.encrypt(source)
 
-    assert calls == [(True, True), (False, True)]
+    expected_calls = (
+        [(True, True), (False, True)]
+        if os.name == "nt"
+        else [(True, True), (False, True), (False, True), (False, True)]
+    )
+    assert calls == expected_calls
 
 
 def test_encrypt_preserves_source_when_destination_sync_fails(manager, tmp_path, monkeypatch):
@@ -215,13 +220,14 @@ def test_encrypt_reports_sync_failure_after_source_removal(manager, tmp_path, mo
     source.write_bytes(b"published")
     calls = 0
 
-    def fail_second_sync(parent):
+    def fail_after_source_unlink(parent):
         nonlocal calls
         calls += 1
-        if calls == 2:
-            raise AtomicOperationError("injected second sync failure")
+        failure_call = 2 if os.name == "nt" else 4
+        if calls == failure_call:
+            raise AtomicOperationError("injected transaction-directory sync failure")
 
-    monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_second_sync)
+    monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_after_source_unlink)
     with pytest.raises(AtomicOperationError, match="source was removed"):
         manager.file.encrypt(source)
 
@@ -242,3 +248,53 @@ def test_directory_rename_syncs_parent(manager, tmp_path, monkeypatch):
     manager.dir.encrypt(directory)
 
     assert calls == [tmp_path]
+
+@pytest.mark.skipif(os.name == "nt", reason="private quarantine is not enabled for inherited Windows ACLs")
+def test_source_replacement_during_retirement_is_restored(manager, tmp_path, monkeypatch):
+    source = tmp_path / "replacement.txt"
+    retained_original = tmp_path / "original-retained.txt"
+    source.write_bytes(b"original source")
+    publish = _filesystem._publish_noreplace
+
+    def replace_before_quarantine(src, dst):
+        if src == source and dst.name == "source":
+            source.rename(retained_original)
+            source.write_bytes(b"concurrent replacement")
+        return publish(src, dst)
+
+    monkeypatch.setattr(_filesystem, "_publish_noreplace", replace_before_quarantine)
+    with pytest.raises(AtomicOperationError, match="identity changed"):
+        manager.file.encrypt(source)
+
+    assert retained_original.read_bytes() == b"original source"
+    assert source.read_bytes() == b"concurrent replacement"
+    assert (tmp_path / "replacement.fscrypt").is_file()
+    assert any(
+        record.operation == "file_encrypt" and record.classification == "ambiguous"
+        for record in manager.inspect_recovery(tmp_path)
+    )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="private quarantine is not enabled for inherited Windows ACLs")
+def test_recovery_inspection_reports_retained_source(manager, tmp_path, monkeypatch):
+    source = tmp_path / "interrupted.txt"
+    source.write_bytes(b"source retained for recovery")
+    original_set_state = _filesystem.Transaction.set_state
+
+    def interrupt_after_quarantine(self, state):
+        if state == "source_retained":
+            raise RuntimeError("injected interruption after quarantine")
+        return original_set_state(self, state)
+
+    monkeypatch.setattr(_filesystem.Transaction, "set_state", interrupt_after_quarantine)
+    with pytest.raises(AtomicOperationError, match="retirement is incomplete"):
+        manager.file.encrypt(source)
+
+    assert not source.exists()
+    assert (tmp_path / "interrupted.fscrypt").is_file()
+    records = manager.inspect_recovery(tmp_path)
+    assert any(
+        record.operation == "file_encrypt"
+        and record.classification == "source_retained"
+        for record in records
+    )
