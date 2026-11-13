@@ -119,3 +119,31 @@ def test_header_size_bound_is_enforced():
     extension = "." + ("a" * 1019)
     header = build_header(original_extension=extension, output_extension=extension)
     assert len(header) <= MAX_HEADER_SIZE
+
+
+def test_visible_header_golden_vector():
+    header = build_header(original_extension=".txt", output_extension=".fscrypt")
+    assert header.hex() == (
+        "4653435246494c00"  # FSCRFIL\\0
+        "0100"              # version
+        "0001"              # original extension present
+        "00000020"          # 32-byte header
+        "0004"              # original extension length
+        "0008"              # output extension length
+        "2e747874"          # .txt
+        "2e66736372797074"  # .fscrypt
+    )
+
+
+def test_empty_output_extension_is_preserved():
+    header = build_header(original_extension=".txt", output_extension="")
+    parsed = parse_header(header)
+    assert parsed.original_extension == ".txt"
+    assert parsed.output_extension == ""
+
+
+def test_original_extension_flag_must_match_length():
+    header = bytearray(build_header(original_extension=".txt", output_extension=".fscrypt"))
+    header[10:12] = struct.pack(">H", 0)
+    with pytest.raises(FormatError):
+        parse_header(bytes(header))
