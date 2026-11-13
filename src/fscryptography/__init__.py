@@ -1,7 +1,6 @@
 """Filesystem-oriented cryptographic operations."""
 
 from .crypto import Manager, generate
-from ._journal import RecoveryRecord
 
 from .errors import (
     AtomicOperationError,
@@ -22,7 +21,6 @@ from .errors import (
 __all__ = [
     "Manager",
     "generate",
-    "RecoveryRecord",
     "AtomicOperationError",
     "AuthenticationError",
     "BackendError",
