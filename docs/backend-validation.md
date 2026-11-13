@@ -11,7 +11,7 @@ Fecha de revisión: 2026-11-12.
 | Área | Resultado | Conclusión |
 |---|---|---|
 | Tink Python: AEAD | API documentada | Puede crear primitivas AEAD y serializar keysets. |
-| Tink Python: Streaming AEAD | API documentada, generación de keysets por confirmar | No cerrar todavía AES256_GCM_HKDF_1MB como backend funcional. |
+| Tink Python: Streaming AEAD | **Validado en CI** | `AES256_GCM_HKDF_1MB` generó keysets, se serializó/recuperó y superó pruebas de cifrado autenticado en Tink 1.16.1 con Python 3.10–3.13 sobre Ubuntu 26.04. |
 | Serialización de keysets Tink | API binaria documentada | Puede utilizarse el formato Protobuf propio de Tink; requiere autorización explícita para material secreto. |
 | Argon2id | API disponible en argon2-cffi | La derivación de una clave binaria fija puede hacerse con la API low-level. |
 | AES-GCM para envolver MasterKey | API disponible en cryptography | Candidato apropiado para el payload pequeño del contenedor, no para cifrado segmentado de archivos. |
@@ -32,9 +32,11 @@ La API Python expone `StreamingAead`, `new_encrypting_stream(...)` y `new_decryp
 
 Sin embargo, el código fuente del módulo de plantillas contiene una advertencia explícita: esas plantillas no pueden utilizarse actualmente para generar keysets y solo pueden utilizarse para generar claves individuales. En cambio, la guía general de Python muestra generación de keysets para una plantilla Streaming AEAD AES-CTR-HMAC. Las fuentes, por tanto, no permiten afirmar sin prueba que la plantilla GCM-HKDF pueda generar un keyset completo en la versión publicada que se vaya a fijar.
 
-**Decisión:** Tink sigue siendo candidato, pero la combinación exacta `AES256_GCM_HKDF_1MB` queda bloqueada hasta ejecutar una prueba contra una versión concreta de `tink`. Esa prueba debe cubrir generación de keyset, serialización, carga, cifrado y descifrado de streams, truncamiento, corrupción, cierre del stream y compatibilidad de instalación en las plataformas objetivo.
+**Resultado de validación:** la prueba automatizada pasó en Tink `1.16.1` para Python `3.10.22`, `3.11.18`, `3.12.16` y `3.13.18`, en runners Ubuntu 26.04. En cada entorno se generó un keyset con `AES256_GCM_HKDF_1MB`, se serializó y recuperó mediante el formato Protobuf de Tink, y la primitiva recuperada superó los round-trips y los rechazos de AAD incorrecto, truncamiento y alteración del ciphertext.
 
-No se sustituirá silenciosamente AES-GCM por AES-CTR-HMAC. Este último es un perfil criptográfico distinto y requeriría una decisión explícita.
+**Decisión:** queda validada la viabilidad técnica de `AES256_GCM_HKDF_1MB` en Tink Python `1.16.1` para la matriz ejecutada. Tink pasa de candidato no verificado a backend seleccionado para el prototipo de Streaming AEAD. Antes de fijar la dependencia en producción aún deben ejecutarse pruebas en los sistemas operativos/plataformas objetivo y pruebas de integración sobre archivos reales.
+
+No se sustituye AES-GCM por AES-CTR-HMAC.
 
 ### Serialización de keysets
 
@@ -106,6 +108,8 @@ El workflow `.github/workflows/backend-validation.yml` ejecuta la misma prueba
 en GitHub Actions con Python 3.10, 3.11, 3.12 y 3.13. El rango de dependencia
 permite observar el comportamiento de las versiones publicadas de Tink dentro
 de la serie mayor 1; el log registra la versión efectiva.
+
+**Resultado observado — GitHub Actions Run 2:** [ejecución](https://github.com/specter327/fscryptography/actions/runs/43354754020), commit `ac75c5e2b062ec7030bce87ae88e2d7a103b83ba`, conclusión `success`. Los cuatro jobs (Python 3.10, 3.11, 3.12 y 3.13) finalizaron correctamente; cada job ejecutó y aprobó los cinco tests. En todos se instaló Tink `1.16.1`. El job Python 3.12 registró además un keyset serializado de 131 bytes.
 
 **Interpretación:** un fallo de generación del keyset para el perfil exacto
 bloquea la selección de ese backend. No se interpreta como permiso para cambiar
