@@ -26,7 +26,6 @@ Todas las excepciones propias de la librería derivan de FsCryptographyError, qu
   - BackendError
   - ClosedInstanceError
   - AtomicOperationError
-    - RecoveryError
 
 ### Definiciones
 
@@ -42,7 +41,6 @@ Todas las excepciones propias de la librería derivan de FsCryptographyError, qu
 - **BackendError:** fallo inesperado de una dependencia criptográfica o de su integración que no sea un error de autenticación ni de formato.
 - **ClosedInstanceError:** se intenta operar con una instancia de Crypto después de close().
 - **AtomicOperationError:** fallo durante la publicación o durante la coordinación de cambios que impide asegurar el estado esperado de la operación.
-- **RecoveryError:** fallo al ejecutar rollback o recuperación de una operación. Deriva de AtomicOperationError e indica que el estado puede requerir intervención o inspección externa.
 
 ## Excepciones estándar del sistema
 Los errores ordinarios del filesystem deben conservar, siempre que sea posible, su tipo estándar de Python y su información causal. Entre ellos:
@@ -74,7 +72,7 @@ Los errores de tipo o valor de argumentos siguen utilizando TypeError y ValueErr
 ## Operaciones atómicas y estado
 Un fallo durante el procesamiento temporal que pueda limpiarse sin comprometer el original debe propagar su error específico, por ejemplo OSError, AuthenticationError o BackendError.
 
-Utilizar AtomicOperationError cuando falle la publicación o la coordinación de cambios y no pueda garantizarse el estado final esperado. Utilizar RecoveryError cuando también falle el rollback o la recuperación.
+Utilizar AtomicOperationError cuando falle la publicación o la coordinación de cambios y no pueda garantizarse el estado final esperado.
 
 No afirmar que una operación fue revertida si la recuperación no pudo confirmarse. El error debe permitir inspeccionar la cadena causal sin exponer material sensible.
 
