@@ -23,6 +23,25 @@ def manager():
         instance.close()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="symlink creation may require elevated Windows privileges")
+def test_source_open_rejects_symlink_substitution(tmp_path):
+    source = tmp_path / "source.bin"
+    target = tmp_path / "target.bin"
+    retained = tmp_path / "retained.bin"
+    source.write_bytes(b"original")
+    target.write_bytes(b"must not be opened")
+    expected = source.stat()
+
+    source.rename(retained)
+    source.symlink_to(target)
+
+    with pytest.raises(OSError):
+        _filesystem._open_source(source, expected)
+
+    assert retained.read_bytes() == b"original"
+    assert target.read_bytes() == b"must not be opened"
+
+
 def test_file_visible_name_round_trip(manager, tmp_path):
     source = tmp_path / "report.txt"
     payload = b"file payload" * 100_000

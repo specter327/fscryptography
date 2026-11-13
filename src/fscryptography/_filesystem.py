@@ -164,6 +164,27 @@ def _check_source(path: Path, *, directory: bool) -> os.stat_result:
     return info
 
 
+def _open_source(path: Path, expected: os.stat_result) -> BinaryIO:
+    """Open the previously inspected regular file without following symlinks.
+
+    O_NOFOLLOW closes the lstat/open symlink substitution window on Linux.
+    The descriptor identity is checked again after open on every platform.
+    The returned stream owns the descriptor.
+    """
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    try:
+        current = os.fstat(descriptor)
+        if not stat.S_ISREG(current.st_mode):
+            raise UnsupportedResourceError("resource is not a regular file")
+        if (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino):
+            raise InvalidPathError("source changed while the operation was starting")
+        return os.fdopen(descriptor, "rb")
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
 def _read_exact(stream: BinaryIO, size: int) -> bytes:
     chunks = bytearray()
     while len(chunks) < size:
@@ -298,10 +319,7 @@ class _FileOperations:
         output = os.fdopen(fd, "wb")
         published = False
         try:
-            with source_path.open("rb") as original:
-                current = os.fstat(original.fileno())
-                if (current.st_dev, current.st_ino) != (source_info.st_dev, source_info.st_ino):
-                    raise InvalidPathError("source changed while the operation was starting")
+            with _open_source(source_path, source_info) as original:
                 output.write(header)
                 _copy_encrypt(
                     self._manager._content_primitive,
@@ -348,10 +366,7 @@ class _FileOperations:
         output = None
         published = False
         try:
-            with source_path.open("rb") as encrypted:
-                current = os.fstat(encrypted.fileno())
-                if (current.st_dev, current.st_ino) != (source_info.st_dev, source_info.st_ino):
-                    raise InvalidPathError("source changed while the operation was starting")
+            with _open_source(source_path, source_info) as encrypted:
                 header = _read_header(encrypted)
                 if header.encrypted_name:
                     destination_name = decrypt_name(
