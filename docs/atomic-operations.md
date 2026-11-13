@@ -47,8 +47,11 @@ La suite `tests/unit/test_filesystem_concurrency.py` añade:
 - Ocho operaciones concurrentes de cifrado/descifrado sobre recursos independientes mediante una misma instancia de `Manager`.
 - Dos operaciones simultáneas que compiten por cifrar el mismo origen; debe existir exactamente un ganador, un único resultado publicable y un round-trip íntegro.
 - Inspección repetida del journal después de la contención para comprobar que sigue siendo de solo lectura.
+- Modificación in-place del archivo origen durante cifrado y del ciphertext durante descifrado: la operación compara identidad, tamaño, `mtime` y `ctime` del descriptor antes de publicar y aborta si detecta cambios.
+- Sustitución determinista del origen durante la retirada y sustitución del directorio padre durante la operación, cubiertas por pruebas GNU/Linux existentes en `tests/unit/test_filesystem.py`.
+- Sustitución determinista de un directorio durante su renombrado, también cubierta en GNU/Linux.
 
-Estas pruebas cubren concurrencia entre llamadas de la API y contención sobre un mismo origen. **No demuestran todavía seguridad frente a un proceso externo que modifica bytes del archivo, sustituye el directorio padre o cambia origen/destino entre validación y mutación.** Esa carrera requiere pruebas deterministas con puntos de sincronización en las primitivas internas y debe ser un criterio pendiente, no una garantía inferida de estas pruebas.
+La detección de modificación compara metadatos observables del descriptor; **no es una instantánea criptográfica del origen ni protege frente a un escritor hostil que pueda manipular metadatos, explotar la granularidad temporal del filesystem o modificar bytes y restaurarlos antes de la comprobación**. En Windows, la retirada aún usa `lstat` seguido de `unlink` y no tiene la cuarentena anclada por descriptor de GNU/Linux; por tanto, la carrera de sustitución entre ambas llamadas no está cerrada. La sustitución de destinos sigue dependiendo de la primitiva atómica no-replace, pero falta una prueba determinista de colisión en el instante exacto de publicación.
 
 ## Estados tras interrupción
 
@@ -69,8 +72,11 @@ Si origen y destino coexisten, no se debe eliminar ninguno sin verificar su iden
 - [x] Identidad del origen revalidada antes de retirarlo.
 - [x] Journal persistente e inspección explícita de solo lectura.
 - [x] Pruebas de concurrencia entre operaciones independientes y contención sobre un mismo origen.
-- [ ] Pruebas deterministas de modificación externa de bytes durante la operación.
-- [ ] Pruebas de sustitución concurrente del padre, origen y destino (TOCTOU).
+- [x] Detección de cambios ordinarios de identidad/tamaño/mtime/ctime del descriptor durante streaming, en cifrado y descifrado.
+- [x] Pruebas deterministas GNU/Linux de sustitución del padre, origen y directorio durante la operación.
+- [ ] Garantía frente a escritores hostiles capaces de manipular/restaurar metadatos o competir dentro de su granularidad.
+- [ ] Retirada de origen resistente a TOCTOU en Windows (cuarentena privada con identidad verificable).
+- [ ] Prueba determinista de colisión de destino justo en el punto de publicación.
 - [ ] Interrupción abrupta del proceso después de cada barrera persistente.
 - [ ] Flush verificable de directorio y garantías de durabilidad en Windows.
 - [ ] Validación empírica en NTFS y ext4, incluidas colisiones case-insensitive/case-sensitive.
