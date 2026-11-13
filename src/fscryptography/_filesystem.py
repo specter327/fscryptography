@@ -344,6 +344,101 @@ def _sync_parent_directory(parent: Path) -> None:
         ) from exc
 
 
+
+def _windows_delete_file_by_identity(path: Path, expected: os.stat_result) -> None:
+    """Delete the exact verified Windows file object through its open handle.
+
+    The pathname is used only to acquire a handle. Identity and file type are
+    checked on that handle, and deletion is requested on the handle itself, so
+    replacing the directory entry after CreateFileW cannot redirect deletion.
+    """
+    if os.name != "nt":
+        raise RuntimeError("handle-based Windows deletion is only available on Windows")
+
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    class FILETIME(ctypes.Structure):
+        _fields_ = [("dwLowDateTime", wintypes.DWORD), ("dwHighDateTime", wintypes.DWORD)]
+
+    class BY_HANDLE_FILE_INFORMATION(ctypes.Structure):
+        _fields_ = [
+            ("dwFileAttributes", wintypes.DWORD),
+            ("ftCreationTime", FILETIME),
+            ("ftLastAccessTime", FILETIME),
+            ("ftLastWriteTime", FILETIME),
+            ("dwVolumeSerialNumber", wintypes.DWORD),
+            ("nFileSizeHigh", wintypes.DWORD),
+            ("nFileSizeLow", wintypes.DWORD),
+            ("nNumberOfLinks", wintypes.DWORD),
+            ("nFileIndexHigh", wintypes.DWORD),
+            ("nFileIndexLow", wintypes.DWORD),
+        ]
+
+    class FILE_DISPOSITION_INFO(ctypes.Structure):
+        _fields_ = [("DeleteFile", wintypes.BOOLEAN)]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateFileW.argtypes = (
+        wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+        wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
+    )
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    kernel32.GetFileInformationByHandle.argtypes = (
+        wintypes.HANDLE, ctypes.POINTER(BY_HANDLE_FILE_INFORMATION),
+    )
+    kernel32.GetFileInformationByHandle.restype = wintypes.BOOL
+    kernel32.SetFileInformationByHandle.argtypes = (
+        wintypes.HANDLE, wintypes.INT, wintypes.LPVOID, wintypes.DWORD,
+    )
+    kernel32.SetFileInformationByHandle.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    # DELETE | FILE_READ_ATTRIBUTES; share read/write/delete; OPEN_EXISTING;
+    # OPEN_REPARSE_POINT prevents following a substituted reparse point.
+    handle = kernel32.CreateFileW(
+        str(path), 0x00010000 | 0x00000080, 0x00000001 | 0x00000002 | 0x00000004,
+        None, 3, 0x00200000, None,
+    )
+    invalid_handle = ctypes.c_void_p(-1).value
+    if handle == invalid_handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+
+    descriptor = None
+    try:
+        information = BY_HANDLE_FILE_INFORMATION()
+        if not kernel32.GetFileInformationByHandle(handle, ctypes.byref(information)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if information.dwFileAttributes & (0x00000010 | 0x00000400):
+            raise AtomicOperationError("quarantined source is a directory or reparse point")
+
+        descriptor = msvcrt.open_osfhandle(
+            int(handle), os.O_RDONLY | getattr(os, "O_BINARY", 0)
+        )
+        handle = None  # descriptor now owns the native handle
+        current = os.fstat(descriptor)
+        if not stat.S_ISREG(current.st_mode) or (
+            current.st_dev, current.st_ino
+        ) != (expected.st_dev, expected.st_ino):
+            raise AtomicOperationError(
+                "quarantined source identity changed; no file was deleted"
+            )
+
+        disposition = FILE_DISPOSITION_INFO(True)
+        native_handle = msvcrt.get_osfhandle(descriptor)
+        if not kernel32.SetFileInformationByHandle(
+            native_handle, 4, ctypes.byref(disposition), ctypes.sizeof(disposition)
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        elif handle not in (None, invalid_handle):
+            kernel32.CloseHandle(handle)
+
+
 def _retire_source(
     source_path: Path,
     transaction: Transaction,
@@ -359,26 +454,43 @@ def _retire_source(
     inspection. The identity check is performed after the atomic rename.
     """
     if anchor is None:
-        # Transaction directories currently inherit the parent's Windows ACL.
-        # Until an explicit private ACL is installed, do not treat that location
-        # as a protected quarantine; retain the previous identity-check behavior.
-        current = source_path.lstat()
-        if (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino):
-            raise AtomicOperationError(
-                "source changed before removal; published output and source were preserved"
-            )
+        # Windows has no Python-level unlink-if-this-file-identity primitive.
+        # First move the entry into the journaled transaction directory. If a
+        # competing process substituted it before the rename, the post-rename
+        # identity check detects that and restores the entry without deleting it.
+        retained = transaction.retained_path
         try:
-            source_path.unlink()
-            _sync_parent_directory(source_path.parent)
+            os.rename(source_path, retained)  # Windows rename does not replace an existing target.
+        except Exception as exc:
+            raise AtomicOperationError(
+                f"{output_kind} was published but the source could not be quarantined safely"
+            ) from exc
+
+        try:
+            moved = retained.lstat()
+            if not stat.S_ISREG(moved.st_mode) or (
+                moved.st_dev, moved.st_ino
+            ) != (expected.st_dev, expected.st_ino):
+                try:
+                    os.rename(retained, source_path)  # Fails rather than replacing a new source entry.
+                except Exception as restore_error:
+                    raise AtomicOperationError(
+                        "source identity changed; the unexpected entry remains in transaction storage "
+                        "for explicit recovery inspection"
+                    ) from restore_error
+                raise AtomicOperationError(
+                    "source identity changed during quarantine; the unexpected entry was restored"
+                )
+
+            transaction.set_state("source_retained")
+            _windows_delete_file_by_identity(retained, expected)
             transaction.set_state("source_removed")
             return
+        except AtomicOperationError:
+            raise
         except Exception as exc:
-            if not source_path.exists():
-                raise AtomicOperationError(
-                    "source was removed, but the namespace update could not be synchronized"
-                ) from exc
             raise AtomicOperationError(
-                f"{output_kind} was published but source removal failed"
+                "published output remains available; source retirement is incomplete and requires inspection"
             ) from exc
 
     try:
