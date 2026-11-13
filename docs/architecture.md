@@ -14,7 +14,7 @@ La API pública, las operaciones de filesystem, el formato y el backend criptogr
 - Format: cabeceras, metadatos y versionado.
 - Filesystem operations: rutas, temporales, publicación no-replace, sincronización y manejo de fallos.
 - Cryptographic backend: integración interna de Tink, Argon2id y AES-GCM de envoltura.
-- Transaction journal: registro persistente de operaciones y diagnóstico explícito de solo lectura, con validación de esquema e identidades de recursos.
+- Transaction state: estado transaccional exclusivamente en memoria y temporales hermanos efímeros para resultados y retirada segura del origen.
 
 Esta división define responsabilidades, no obliga a crear un archivo por componente.
 
@@ -27,7 +27,7 @@ La primera versión utiliza un único backend criptográfico; no se diseña una 
 ## Estado de componentes
 
 - **Implementado:** validación y codec de nombres Tink; generación/apertura de MasterKey; recuperación de keysets; API `generate()`/`Manager`; cambio y exportación de clave; formato binario de archivo v1.0; cifrado/descifrado de archivos con Tink Streaming AEAD; cifrado/descifrado de nombres de archivos y directorios; temporales privados; publicación no-replace; sincronización del archivo temporal y del directorio padre en GNU/Linux.
-- **Implementado:** journal persistente por transacción, formato estricto, estados persistentes, validación de identidades e inspección explícita de solo lectura.
+- **Implementado:** estado transaccional en memoria, temporales hermanos exclusivos, publicación no-replace y retirada del origen mediante staging con verificación de identidad.
 - **Pendiente:** resolución o limpieza explícita de transacciones, política de retención, robustecimiento frente a fallos inyectados y validación integral de filesystem.
 - **Pendiente de validación de plataforma:** comportamiento real en NTFS y ext4, límites Unicode exactos en Windows, colisiones bajo configuraciones case-sensitive y garantías de durabilidad.
 - **Pendiente de robustecimiento:** resolución explícita de transacciones, flush de directorio en Windows, pruebas de concurrencia/cambios hostiles y preservación de metadatos de filesystem.
@@ -40,8 +40,8 @@ Validar origen y destino; crear temporal exclusivo en el mismo directorio; escri
 
 Reconocer y validar la cabecera; preparar temporal privado; descifrar y autenticar todos los segmentos; validar el cierre; sincronizar el archivo temporal; validar el nombre original; publicar únicamente tras autenticación completa; sincronizar el directorio padre en GNU/Linux; retirar el ciphertext y sincronizar nuevamente el directorio padre.
 
-## Recuperación y límites
+## Estado transaccional y límites
 
-El journal persistente registra las etapas de las operaciones y `Manager.inspect_recovery()` permite inspeccionar su estado sin modificar recursos. No existe recuperación automática ni resolución destructiva de operaciones interrumpidas abruptamente. Los temporales huérfanos no se eliminan automáticamente. Si la publicación se completó pero el origen no pudo retirarse, ambos recursos se conservan y se informa `AtomicOperationError`.
+El estado de cada operación vive exclusivamente en memoria y desaparece al terminar el proceso. No hay journal, directorio de transacción persistente, API de inspección ni recuperación posterior. Los archivos de resultado se escriben mediante temporales hermanos para conservar el procesamiento streaming; la retirada del origen usa un nombre hermano aleatorio y comprueba la identidad después del rename. Una interrupción abrupta puede dejar temporales de resultado o de origen. La librería no puede clasificarlos ni limpiarlos automáticamente. Si el destino se publicó pero la retirada del origen falló, ambos recursos pueden permanecer y se informa AtomicOperationError.
 
-El contrato del journal está en `docs/recovery-journal.md`. La inspección implementada es explícita y de solo lectura; no muta el filesystem. No implementar primitivas propias. No publicar plaintext parcial. No sobrescribir destinos por defecto. No asumir que múltiples renames forman una transacción. No prometer borrado seguro absoluto de secretos en memoria Python.
+No implementar primitivas propias. No publicar plaintext parcial. No sobrescribir destinos por defecto. No asumir que múltiples renames forman una transacción. No prometer borrado seguro absoluto de secretos en memoria Python.
