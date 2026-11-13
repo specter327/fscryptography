@@ -314,7 +314,6 @@ class _FileOperations:
             _publish_noreplace(temporary, destination)
             published = True
             _sync_parent_directory(source_path.parent)
-            _sync_parent_directory(transaction.directory)
             transaction.set_state("published")
             try:
                 latest = source_path.lstat()
@@ -325,7 +324,12 @@ class _FileOperations:
                 if isinstance(exc, AtomicOperationError):
                     raise
                 raise AtomicOperationError("encrypted output was published but source removal failed") from exc
-            _sync_parent_directory(source_path.parent)
+            try:
+                _sync_parent_directory(source_path.parent)
+            except AtomicOperationError as exc:
+                raise AtomicOperationError(
+                    "source was removed, but the namespace update could not be synchronized"
+                ) from exc
             transaction.set_state("source_removed")
             transaction.set_state("complete")
             transaction.finish()
