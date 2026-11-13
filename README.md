@@ -4,7 +4,7 @@
 
 Proporciona una interfaz de alto nivel basada en rutas, con procesamiento autenticado y segmentado de archivos. Su diseño es autónomo: no depende de herramientas de exploración de recursos ni de aplicaciones concretas.
 
-> **Estado del proyecto:** especificación en consolidación. La implementación todavía no está disponible.
+> **Estado del proyecto:** implementación inicial del paquete en curso. Ya existe el subsistema base de validación y codec de nombres; las operaciones de archivos/directorios, MasterKey y filesystem siguen pendientes.
 
 ## Alcance
 
