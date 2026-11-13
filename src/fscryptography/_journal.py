@@ -250,12 +250,12 @@ def inspect(parent: str | os.PathLike[str]) -> tuple[RecoveryRecord, ...]:
                 raise ValueError("journal is not a bounded regular file")
             flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
             fd = os.open(journal, flags)
-            try:
-                opened_info = os.fstat(fd)
-                if not stat.S_ISREG(opened_info.st_mode) or _identity(opened_info) != _identity(journal_info):
-                    raise ValueError("journal changed during inspection")
-                with os.fdopen(fd, "rb") as stream:
-                    raw = stream.read(_MAX_RECORD + 1)
+            opened_info = os.fstat(fd)
+            if not stat.S_ISREG(opened_info.st_mode) or _identity(opened_info) != _identity(journal_info):
+                os.close(fd)
+                raise ValueError("journal changed during inspection")
+            with os.fdopen(fd, "rb") as stream:
+                raw = stream.read(_MAX_RECORD + 1)
             data = _decode(raw, transaction_id, root_info)
             if data["parent_identity"] != _identity(root_info):
                 records.append(RecoveryRecord(
