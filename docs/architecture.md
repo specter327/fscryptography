@@ -6,7 +6,7 @@ La API pública, las operaciones de filesystem, el formato y el backend criptogr
 
 ## Componentes lógicos
 
-- Crypto: inicialización, ciclo de vida y fachada de operaciones.
+- Manager: inicialización, ciclo de vida, almacenamiento binario de la clave y contexto reutilizable de operaciones.
 - File operations: cifrado y descifrado del contenido.
 - Directory operations: transformación del nombre de directorio.
 - Name codec: codificación y validación de nombres cifrados.
@@ -25,7 +25,7 @@ La primera versión utiliza un único backend criptográfico; no se diseña una 
 
 ## Estado de componentes
 
-- **Implementado:** validación de nombres, codec de nombres Tink, generación/apertura de MasterKey, recuperación de keysets Tink y fachada inicial Crypto.
+- **Implementado:** validación de nombres, codec de nombres Tink, generación/apertura de MasterKey, recuperación de keysets Tink y API pública generate()/Manager, cambio y exportación de clave.
 - **Especificado parcialmente:** formato binario de archivo con cabecera autenticada como AAD y flujo Streaming AEAD directo. La semántica de extensión y el contrato de new_extension siguen pendientes.
 - **Pendiente:** operaciones reales sobre rutas, temporales, publicación sin sobrescritura, rollback y validación en filesystems objetivo.
 
