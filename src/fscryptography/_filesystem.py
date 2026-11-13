@@ -302,6 +302,40 @@ def _rename_directory_checked(
             raise
         raise AtomicOperationError("directory rename failed verification; original entry was restored") from exc
 
+
+def _rename_directory_checked_path(
+    source: Path,
+    destination: Path,
+    expected: os.stat_result,
+) -> None:
+    """Windows path-based directory rename with post-rename identity verification.
+
+    Windows os.rename refuses an existing destination. If a competing process
+    substitutes the source between inspection and rename, restore the moved
+    entry without overwriting a newly-created source path.
+    """
+    os.rename(source, destination)
+    try:
+        moved = destination.lstat()
+        if (
+            not stat.S_ISDIR(moved.st_mode)
+            or _is_reparse_point(moved)
+            or (moved.st_dev, moved.st_ino) != (expected.st_dev, expected.st_ino)
+        ):
+            raise InvalidPathError("directory identity changed before rename")
+    except BaseException as exc:
+        try:
+            os.rename(destination, source)
+        except BaseException as restore_error:
+            raise AtomicOperationError(
+                "directory identity changed during rename; the moved entry could not be restored safely"
+            ) from restore_error
+        if isinstance(exc, InvalidPathError):
+            raise
+        raise AtomicOperationError(
+            "directory rename failed verification; original entry was restored"
+        ) from exc
+
 def _read_exact(stream: BinaryIO, size: int) -> bytes:
     chunks = bytearray()
     while len(chunks) < size:
@@ -840,7 +874,7 @@ class _DirectoryOperations:
             if anchor is not None:
                 _rename_directory_checked(anchor, source.name, destination.name, source_info)
             else:
-                _publish_noreplace(source, destination)
+                _rename_directory_checked_path(source, destination, source_info)
                 _sync_parent_directory(source.parent)
             transaction.set_state("published")
             transaction.set_state("source_removed")
@@ -873,10 +907,9 @@ class _DirectoryOperations:
                 parent_fd=anchor.fd if anchor is not None else None,
             )
             if anchor is not None:
-                anchor.rename_noreplace(source.name, anchor.fd, destination.name)
-                anchor.sync()
+                _rename_directory_checked(anchor, source.name, destination.name, source_info)
             else:
-                _publish_noreplace(source, destination)
+                _rename_directory_checked_path(source, destination, source_info)
                 _sync_parent_directory(source.parent)
             transaction.set_state("published")
             transaction.set_state("source_removed")
