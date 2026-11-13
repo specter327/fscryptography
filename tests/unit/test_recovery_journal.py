@@ -138,8 +138,8 @@ def test_inspection_result_is_immutable(tmp_path):
         b'{"format":1,"format":1}',
         b'{"format":2}',
         b'{"format":NaN}',
-        b"\\xef\\xbb\\xbf{}",
-        b"{}\\n",
+        b"\xef\xbb\xbf{}",
+        b"{}\n",
     ],
 )
 def test_malformed_and_noncanonical_journals_are_corrupt(tmp_path, payload):
