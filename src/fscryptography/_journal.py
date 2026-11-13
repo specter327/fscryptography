@@ -107,8 +107,6 @@ def _decode(raw: bytes, transaction_id: str, parent_info: os.stat_result) -> dic
         raise ValueError("temporary name does not match operation")
     if type(data["created_ns"]) is not int or not 0 <= data["created_ns"] <= 2**63 - 1:
         raise ValueError("invalid creation timestamp")
-    if data["parent_identity"] != _identity(parent_info):
-        raise ValueError("parent directory identity mismatch")
     # Canonical representation is required; this also rejects trailing bytes/newlines.
     if _encode(data) != raw:
         raise ValueError("journal is not canonically encoded")
@@ -251,9 +249,26 @@ def inspect(parent: str | os.PathLike[str]) -> tuple[RecoveryRecord, ...]:
             flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
             fd = os.open(journal, flags)
             try:
+                opened_info = os.fstat(fd)
+                if not stat.S_ISREG(opened_info.st_mode) or _identity(opened_info) != _identity(journal_info):
+                    raise ValueError("journal changed during inspection")
                 with os.fdopen(fd, "rb") as stream:
                     raw = stream.read(_MAX_RECORD + 1)
             data = _decode(raw, transaction_id, root_info)
+            if data["parent_identity"] != _identity(root_info):
+                records.append(RecoveryRecord(
+                    transaction_id, data["operation"], data["state"], "ambiguous",
+                    data["source_name"], data["destination_name"], data["temporary_name"],
+                    "parent directory identity mismatch",
+                ))
+                continue
+            if data["parent_identity"]["inode"] == 0 or data["source_identity"]["inode"] == 0:
+                records.append(RecoveryRecord(
+                    transaction_id, data["operation"], data["state"], "ambiguous",
+                    data["source_name"], data["destination_name"], data["temporary_name"],
+                    "filesystem identity is not verifiable on this platform",
+                ))
+                continue
             source = root / data["source_name"]
             destination = root / data["destination_name"]
             source_kind, source_id = _lstat_identity(source)
