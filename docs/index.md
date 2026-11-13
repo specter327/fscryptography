@@ -10,6 +10,7 @@ Referencia técnica de la librería. El README es una presentación breve; las d
 - [Gestión de claves](key-management.md)
 - [Formato de MasterKey](master-key-format.md)
 - [Política de Argon2id y límites de apertura](argon2id-policy.md)
+- [Benchmark reproducible de Argon2id](argon2id-benchmark.md)
 - [Plan de pruebas del formato MasterKey](master-key-format-test-plan.md)
 - [Cifrado de nombres](filename-encryption.md)
 - [Formato de archivos](file-format.md)
