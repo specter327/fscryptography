@@ -85,11 +85,13 @@ El parser debe rechazar parámetros no admitidos sin intentar la KDF. Las prueba
 
 El perfil 64 MiB / 3 iteraciones / paralelismo 1 es una propuesta inicial, no una garantía de rendimiento.
 
+El procedimiento y la herramienta reproducible están definidos en [Benchmark reproducible de Argon2id](argon2id-benchmark.md). El ejecutable es `tests/backend_validation/benchmark_argon2id.py`; mide latencia, distribución de tiempos y lotes concurrentes controlados. No forma parte de la API pública ni se ejecuta en CI por defecto.
+
 Antes de declararlo definitivo se debe medir:
 
 - Un equipo de escritorio o portátil de gama modesta.
 - Un equipo de memoria limitada dentro de las plataformas objetivo.
-- Tiempo por derivación, memoria máxima observada y comportamiento bajo aperturas concurrentes.
+- Tiempo por derivación, memoria teórica y comportamiento bajo aperturas concurrentes.
 - Distribución de tiempos en ejecuciones repetidas, no solo una medición aislada.
 - Compatibilidad del resultado derivado entre las versiones de Python y plataformas soportadas.
 
