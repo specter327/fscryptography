@@ -82,6 +82,37 @@ La implementación debe generar un nonce nuevo y aleatorio por contenedor y nunc
 
 Esta arquitectura es una propuesta de integración, no una selección definitiva de dependencias ni una afirmación de que el backend de archivos ya funciona.
 
+## Ejecución automatizada de la prueba Tink Python
+
+El repositorio incluye una prueba de integración ejecutable en
+`tests/backend_validation/test_tink_streaming_aead.py`. Comprueba, sin
+fallback a otro perfil:
+
+1. Disponibilidad de `AES256_GCM_HKDF_1MB` en la API Python instalada.
+2. Generación del keyset mediante `tink.new_keyset_handle(...)`.
+3. Serialización binaria Protobuf y recuperación mediante las APIs de Tink.
+4. Creación de la primitiva desde el keyset recuperado.
+5. Round-trip de payload vacío, pequeño y de 2 MiB.
+6. Rechazo de AAD incorrecto, ciphertext truncado y ciphertext alterado.
+
+Ejecución local:
+
+```bash
+python -m pip install "tink>=1.11,<2"
+python tests/backend_validation/test_tink_streaming_aead.py
+```
+
+El workflow `.github/workflows/backend-validation.yml` ejecuta la misma prueba
+en GitHub Actions con Python 3.10, 3.11, 3.12 y 3.13. El rango de dependencia
+permite observar el comportamiento de las versiones publicadas de Tink dentro
+de la serie mayor 1; el log registra la versión efectiva.
+
+**Interpretación:** un fallo de generación del keyset para el perfil exacto
+bloquea la selección de ese backend. No se interpreta como permiso para cambiar
+a AES-CTR-HMAC. Un workflow verde valida únicamente los entornos de CI
+ejecutados; no sustituye la matriz de sistemas operativos/plataformas objetivo
+ni la auditoría de seguridad.
+
 ## Pruebas de validación obligatorias
 
 1. Instalar la versión candidata de Tink en cada plataforma objetivo.
