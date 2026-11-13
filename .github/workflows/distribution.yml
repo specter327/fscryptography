@@ -85,6 +85,9 @@ jobs:
           python -m pip install ".[test]"
           python -m pytest -q tests/unit tests/file_format
 
+      - name: Run real filesystem resource demonstration
+        run: python tests/real_resources.py
+
       - name: Upload distribution artifacts
         uses: actions/upload-artifact@v4
         with:
