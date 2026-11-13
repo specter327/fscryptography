@@ -81,13 +81,9 @@ Todas las excepciones propias derivan de FsCryptographyError. La jerarquía, la 
 
 Los errores de argumentos conservan TypeError o ValueError; los errores ordinarios del filesystem conservan las excepciones estándar de Python cuando sea posible. La contraseña incorrecta y la alteración de un contenedor protegido se presentan como AuthenticationError, sin distinguir públicamente ambos casos.
 
-## Inspección de operaciones interrumpidas
+## Estado transaccional y fallos abruptos
 
-    records = manager.inspect_recovery("/path/to/parent")
-
-La llamada inspecciona exclusivamente los directorios `.fscryptography-txn-*` situados directamente bajo el directorio indicado. Devuelve una tupla inmutable de objetos `fscryptography.RecoveryRecord`. Las clasificaciones incluyen `prepared_no_output`, `result_incomplete_or_unverified`, `result_ready`, `published_source_present`, `published_source_missing`, `source_removed`, `ambiguous` y `corrupt`.
-
-La inspección es de solo lectura y no requiere una clave abierta: no descifra ni autentica contenido. Los registros completados se conservan como evidencia; no hay limpieza automática ni resolución destructiva. Una clasificación nunca autoriza por sí sola a borrar, restaurar o reemplazar recursos.
+El estado transaccional se mantiene exclusivamente en memoria. No existe Manager.inspect_recovery(), RecoveryRecord ni API de recuperación. Los temporales de resultado y de staging del origen son entradas hermanas efímeras del directorio padre; una terminación abrupta puede dejarlas atrás. La librería no realiza recuperación, clasificación ni limpieza automática en una ejecución posterior.
 
 ## Estado de implementación
 
