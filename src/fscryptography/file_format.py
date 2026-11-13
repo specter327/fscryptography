@@ -82,6 +82,8 @@ def build_header(
     """
     original = validate_extension(original_extension)
     output = validate_extension(output_extension)
+    if original == "":
+        raise ValueError("original_extension must be None or a non-empty suffix")
     if not isinstance(encrypted_name, bool):
         raise TypeError("encrypted_name must be bool")
     if encrypted_name:
