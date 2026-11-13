@@ -17,7 +17,7 @@ Las operaciones sobre directorios transforman únicamente su nombre; no recorren
 
 ## Diseño
 
-El diseño criptográfico contempla AES-256-GCM y procesamiento autenticado segmentado, con un tamaño objetivo predeterminado de 1 MiB. Google Tink es el backend candidato para Streaming AEAD y Argon2id es la KDF seleccionada conceptualmente para derivación desde contraseñas. Estas decisiones requieren validación técnica antes de considerarse cerradas.
+El diseño criptográfico utiliza Google Tink como backend seleccionado para el prototipo de Streaming AEAD (`AES256_GCM_HKDF_1MB`). La generación, serialización y recuperación de keysets, así como los round-trips y rechazos de alteraciones, se validaron en CI con Python 3.10–3.13. Argon2id y AES-256-GCM para proteger el contenedor `MasterKey` también superaron pruebas de API en esa matriz. Esto valida las dependencias y composiciones probadas; no equivale a una implementación funcional, auditoría criptográfica ni validación multiplataforma.
 
 ## Independencia
 
