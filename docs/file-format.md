@@ -150,3 +150,49 @@ Hasta resolver estos puntos, el layout de cabecera y el uso de Streaming AEAD qu
 - [ ] Validar round-trip de archivos vacíos, pequeños, multi-segmento y grandes.
 - [ ] Verificar truncamiento, alteración, reordenamiento, AAD incorrecto y cierre incompleto.
 - [ ] Implementar operaciones de filesystem y validar sobre NTFS/ext4 reales.
+
+## Propuesta concreta de política de extensión (pendiente de aprobación)
+
+Para cerrar los casos ambiguos se propone el siguiente contrato, sin cambiar todavía el estado del formato a aprobado:
+
+### Identificación de la extensión original
+
+- La extensión es el último sufijo iniciado por un punto que no sea el primer carácter del nombre.
+- Un nombre sin punto separador no tiene extensión.
+- Un *dotfile* cuyo único punto es el primero no tiene extensión: `.profile` conserva el nombre completo como base.
+- En nombres con varios puntos solo se considera extensión el último sufijo: `archive.tar.gz` tiene base `archive.tar` y extensión `.gz`; `.config.json` tiene base `.config` y extensión `.json`.
+- Un punto final no constituye una extensión: `report.` se interpreta como base `report.` sin extensión.
+- Se conserva exactamente la secuencia original de caracteres y su capitalización. No se aplica normalización Unicode ni conversión de mayúsculas/minúsculas.
+
+### Contrato propuesto de `new_extension`
+
+- Tipo: `str | None`.
+- `None`: usar la extensión original; si no existe, no añadir ninguna.
+- Cadena vacía `""`: eliminar la extensión visible.
+- Una cadena no vacía debe comenzar por exactamente un punto y contener al menos un carácter después de él, por ejemplo `.enc` o `.vault`.
+- No se elimina ni añade el punto automáticamente. Entradas sin punto inicial, compuestas solo por puntos, con separadores de ruta, NUL o caracteres no válidos para el perfil de filesystem se rechazan; nunca se normalizan silenciosamente.
+- La extensión se valida como un sufijo de un único componente y se vuelve a validar el nombre completo resultante contra los límites reales del destino.
+- `new_extension` solo aplica cuando el nombre permanece visible. Si se solicita cifrado del nombre, la extensión completa queda dentro del nombre cifrado y proporcionar `new_extension` distinto de `None` se rechaza.
+
+### Nombre de salida predeterminado propuesto
+
+- Al cifrar con nombre visible y sin `new_extension`, usar `.fscrypt` como extensión de salida, independientemente de la extensión original.
+- La extensión original se conserva en la cabecera autenticada y se restaura al descifrar.
+- Al descifrar, si no se solicita una extensión alternativa, se restaura exactamente la extensión original; si el archivo original no tenía extensión, no se añade ninguna.
+- El sufijo `.fscrypt` no es una señal de autenticidad ni sustituye la validación de magic, versión, cabecera y AEAD.
+- Si el nombre se cifra, el nombre completo se transforma mediante el codec de nombres; no se añade `.fscrypt` visible.
+
+### Ejemplos propuestos
+
+| Nombre original | Base | Extensión original | Salida cifrada visible predeterminada |
+|---|---|---|---|
+| `document.txt` | `document` | `.txt` | `document.fscrypt` |
+| `archive.tar.gz` | `archive.tar` | `.gz` | `archive.tar.fscrypt` |
+| `.profile` | `.profile` | Ninguna | `.profile.fscrypt` |
+| `README` | `README` | Ninguna | `README.fscrypt` |
+| `report.` | `report.` | Ninguna | `report..fscrypt` |
+
+La tabla describe únicamente la transformación del sufijo; los nombres resultantes todavía deben superar las restricciones del filesystem y la política de colisiones/no sobrescritura.
+
+**Estado de esta propuesta:** recomendación para revisión. No constituye todavía un contrato normativo ni autoriza la implementación. Se requiere aprobación explícita antes de marcar la semántica de extensión o el formato binario v1.0 como cerrados.
+
