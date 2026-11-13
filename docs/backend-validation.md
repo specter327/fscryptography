@@ -97,11 +97,11 @@ El workflow instala `argon2-cffi>=23.1,<26` y `cryptography>=42,<47`, registra l
 ## Arquitectura candidata resultante
 
 - **Archivos:** Streaming AEAD de Tink con AES256-GCM-HKDF-1MB, únicamente si la prueba de generación y round-trip del keyset pasa. Si no pasa, detener la selección del backend y evaluar alternativas; no implementar un protocolo propio.
-- **Nombres:** Tink AEAD `AES256_GCM` con keyset independiente de tipo `Aead`, validado en CI; codificación textual y límite de longitud del componente aún pendientes.
+- **Nombres:** Tink AEAD `AES256_GCM` con keyset independiente de tipo `Aead`, validado en CI; contrato aprobado `~1` + Base64URL sin padding, con máximo derivado de 156 bytes UTF-8 para componentes de 255 bytes. La validación en filesystems objetivo sigue pendiente.
 - **MasterKey protegido:** Argon2id de argon2-cffi para derivar 32 bytes y AES-256-GCM de cryptography para envolver el payload serializado. La API/composición tiene una prueba CI añadida; la validación de ejecución aún está pendiente.
 - **Keysets:** formato binario Protobuf soportado por Tink, contenido dentro del payload del contenedor; no definir un formato alternativo de keyset.
 
-El perfil de nombre Tink `AES256_GCM` está validado como backend candidato del prototipo, no como implementación productiva. Esta validación no demuestra todavía operaciones sobre rutas/filesystems ni resuelve la codificación y el presupuesto de longitud del nombre.
+El perfil de nombre Tink `AES256_GCM` está validado como backend candidato del prototipo, no como implementación productiva. El contrato de codificación está aprobado: `~1` + Base64URL sin padding, con máximo derivado de 156 bytes UTF-8 para componentes de 255 bytes. Esta validación no demuestra todavía operaciones sobre rutas/filesystems ni compatibilidad con sus límites reales.
 
 ## Ejecución automatizada de la prueba Tink Python
 
