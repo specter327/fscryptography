@@ -2,7 +2,7 @@
 
 ## Estado
 
-**Diseño especificado; implementación pendiente.** Este documento fija el protocolo que debe implementarse antes de activar cualquier recuperación. No describe una capacidad disponible en la versión actual.
+**Implementación inicial disponible: journal v1 e inspección de solo lectura.** Las operaciones de archivo y directorio persisten transacciones y `Manager.inspect_recovery(parent)` permite inspeccionarlas. No existe resolución automática ni limpieza automática. La implementación todavía requiere ampliar pruebas de fallos en cada barrera y validación multiplataforma real.
 
 ## Objetivos y límites
 
@@ -85,7 +85,7 @@ En Windows, Python no ofrece en esta implementación un flush verificable y port
 9. Revalidar la identidad del origen y retirarlo únicamente si coincide exactamente.
 10. Sincronizar el padre donde esté soportado.
 11. Persistir `source_removed`, luego `complete`.
-12. Retirar el directorio transaccional y sincronizar el padre donde esté soportado.
+12. Conservar el journal `complete` como evidencia. La limpieza se difiere hasta definir una política de retención y eliminación segura independiente.
 
 Si falla una transición, no se debe continuar con una mutación posterior. Los recursos ya publicados permanecen. El journal debe permanecer disponible para inspección.
 
@@ -147,4 +147,4 @@ Las clasificaciones no autorizan mutaciones. En particular, nunca se elimina un 
 
 ## API pública
 
-No se añade todavía una API pública de recuperación en este cambio de diseño. La implementación debe separar la inspección de cualquier operación de resolución y definir un resultado tipado e inmutable antes de exponerlo. No se añadirá recuperación automática al constructor de `Manager`.
+La API pública expone `Manager.inspect_recovery(parent) -> tuple[RecoveryRecord, ...]`. Cada `RecoveryRecord` es una dataclass congelada con identificador, operación, estado, clasificación y nombres de recursos. La inspección no necesita la clave maestra, no se ejecuta en el constructor y nunca modifica el filesystem. No existe todavía API de resolución.
