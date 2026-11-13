@@ -45,7 +45,7 @@ Límites estructurales propuestos para v1:
 - Longitud del payload exterior: máximo 128 KiB en modo aleatorio y 128 KiB + 16 bytes en modo protegido (tag GCM incluido).
 - Los límites se comprueban antes de reservar memoria o invocar el parser Protobuf.
 
-El keyset de nombres utiliza la primitiva Tink `Aead` con la plantilla `AES256_GCM`, validada mediante prueba ejecutable en Tink 1.16.1 con Python 3.10–3.13. La codificación textual del nombre y las restricciones de longitud/filesystem siguen pendientes; véase [Cifrado de nombres](filename-encryption.md).
+El keyset de nombres utiliza la primitiva Tink `Aead` con la plantilla `AES256_GCM`, validada mediante prueba ejecutable en Tink 1.16.1 con Python 3.10–3.13. La representación textual aprobada es `~1` seguido de ciphertext Tink en Base64URL sin padding; para componentes de 255 bytes, el máximo derivado de plaintext UTF-8 es 156 bytes. La validación sobre filesystems objetivo sigue pendiente; véase [Cifrado de nombres](filename-encryption.md).
 
 ## Propuesta de formato binario v1
 
@@ -176,6 +176,7 @@ Base64 no es cifrado. El modo aleatorio debe protegerse como una credencial secr
 - Framing del payload con dos longitudes Protobuf de Tink.
 - Límites estructurales de 32 KiB por keyset y 128 KiB por payload lógico.
 - Codificación UTF-8 estricta sin normalización implícita.
+- Representación de nombres aprobada: marcador `~1` + Base64URL sin padding; máximo derivado de 156 bytes UTF-8 para componentes de 255 bytes.
 
 **Validación de conformidad añadida:**
 - Vectores golden sintéticos para los modos aleatorio y protegido en `tests/master_key_format/fixtures/master_key_v1_vectors.json`.
@@ -187,7 +188,11 @@ Base64 no es cifrado. El modo aleatorio debe protegerse como una credencial secr
 - Perfil Argon2id v1 y rechazo de cualquier parámetro distinto del perfil aprobado antes de ejecutar la KDF.
 
 **Validado para el prototipo:**
-- Perfil AEAD de nombres Tink `AES256_GCM` y keyset `Aead`, con prueba CI en Python 3.10–3.13. La codificación de nombres y el presupuesto de longitud siguen pendientes de aprobación.
+- Perfil AEAD de nombres Tink `AES256_GCM` y keyset `Aead`, con prueba CI en Python 3.10–3.13.
+
+**Aprobado como contrato de nombres v1:**
+- Marcador `~1` seguido de ciphertext Tink codificado en Base64URL sin padding.
+- Máximo derivado de 156 bytes UTF-8 cuando el límite del componente es 255 bytes. La compatibilidad real y las reglas específicas de cada filesystem aún deben validarse.
 
 **Pendiente antes de implementar la gestión productiva de claves:**
 - Vectores binarios golden definitivos y pruebas de integración con keysets Tink reales.
