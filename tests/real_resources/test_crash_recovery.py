@@ -10,10 +10,6 @@ import pytest
 from fscryptography._journal import inspect
 
 
-pytestmark = pytest.mark.skipif(
-    not sys.platform.startswith("linux"),
-    reason="crash-state inspection currently relies on GNU/Linux descriptor-relative recovery",
-)
 
 
 _CRASH_EXIT = 73

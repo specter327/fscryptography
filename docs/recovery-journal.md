@@ -2,7 +2,7 @@
 
 ## Estado
 
-**Implementación disponible: journal v1 e inspección de solo lectura.** Las operaciones de archivo y directorio persisten transacciones y `Manager.inspect_recovery(parent)` permite inspeccionarlas. No existe resolución automática ni limpieza automática. Se cubren terminaciones abruptas del proceso en GNU/Linux antes y después de persistir cada estado de archivo; sigue pendiente la matriz equivalente en Windows y la validación ante pérdida real de energía.
+**Implementación disponible: journal v1 e inspección de solo lectura.** Las operaciones de archivo y directorio persisten transacciones y `Manager.inspect_recovery(parent)` permite inspeccionarlas. No existe resolución automática ni limpieza automática. La suite de terminación abrupta del proceso cubre los estados de archivo antes y después de persistirlos tanto en GNU/Linux como en Windows; Windows utiliza inspección path-based, con garantías de carrera más débiles que la inspección descriptor-relative de GNU/Linux. Ninguna de estas pruebas simula pérdida real de energía.
 
 ## Objetivos y límites
 
@@ -165,9 +165,9 @@ La suite de inspección incluye ahora casos adicionales para:
 Estos casos amplían la cobertura de fallos simulados; no equivalen a pruebas de pérdida real de energía ni a pruebas de concurrencia hostil. Siguen pendientes la matriz exhaustiva de fallos en cada operación filesystem, carreras entre validación y mutación, sustitución concurrente del padre/recursos y pruebas sobre filesystems alternativos.
 
 
-## Terminación abrupta del proceso (GNU/Linux)
+## Terminación abrupta del proceso (GNU/Linux y Windows)
 
-La integración `tests/integration/test_crash_recovery.py` usa un proceso hijo y `os._exit` para terminar sin ejecutar `finally`, limpieza de contexto ni cierre ordenado de la aplicación. Se fuerza la terminación inmediatamente antes y después de persistir cada estado de archivo:
+La integración `tests/real_resources/test_crash_recovery.py` usa un proceso hijo y `os._exit` para terminar sin ejecutar `finally`, limpieza de contexto ni cierre ordenado de la aplicación. Se fuerza la terminación inmediatamente antes y después de persistir cada estado de archivo:
 
 - `prepared`
 - `result_ready`
@@ -180,4 +180,4 @@ La prueba comprueba la clasificación resultante y el estado físico de origen y
 
 El estado durable puede ir por detrás del filesystem: si el proceso termina después de publicar pero antes de persistir `published`, el journal conserva `result_ready` mientras el destino ya existe; si termina después de retirar el origen pero antes de persistir `source_removed`, el journal conserva `source_retained` aunque el destino sea el único recurso visible. Por eso la clasificación se basa en las identidades observadas y no solo en el campo `state`.
 
-La prueba no representa un corte eléctrico ni un fallo del kernel/dispositivo. Tampoco valida la durabilidad física de los datos. La cobertura de terminación abrupta en Windows y las garantías reales de NTFS siguen pendientes.
+En GNU/Linux la inspección utiliza anclaje descriptor-relative; en Windows utiliza la ruta path-based y no ofrece las mismas garantías frente a carreras hostiles durante la inspección. En ambos casos, la prueba no representa un corte eléctrico ni un fallo del kernel/dispositivo y no valida la durabilidad física de los datos. La prueba Windows se ejecuta sobre NTFS en el runner Windows Server 2025; Windows 11 cliente sigue pendiente.
