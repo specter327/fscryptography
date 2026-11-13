@@ -117,7 +117,8 @@ def test_identity_mismatch_is_ambiguous(tmp_path):
     record = inspect(tmp_path)[0]
 
     assert record.classification == "ambiguous"
-    assert replacement.exists()
+    assert source.exists()
+    assert source.read_bytes() == b"other"
 
 
 def test_inspection_result_is_immutable(tmp_path):
