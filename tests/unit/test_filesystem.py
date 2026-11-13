@@ -361,3 +361,36 @@ def test_recovery_inspection_does_not_follow_transaction_symlink(manager, tmp_pa
     records = manager.inspect_recovery(tmp_path)
     assert len(records) == 1
     assert records[0].classification == "corrupt"
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="directory descriptor anchoring is GNU/Linux-only")
+def test_directory_replacement_during_rename_is_restored(manager, tmp_path, monkeypatch):
+    source = tmp_path / "directory"
+    retained_original = tmp_path / "original-directory"
+    source.mkdir()
+    (source / "original.txt").write_text("original", encoding="utf-8")
+    rename_noreplace = _filesystem.DirectoryAnchor.rename_noreplace
+    replaced = False
+
+    def replace_before_rename(anchor, source_name, destination_fd, destination_name):
+        nonlocal replaced
+        if source_name == source.name and destination_name != source.name and not replaced:
+            source.rename(retained_original)
+            source.mkdir()
+            (source / "replacement.txt").write_text("replacement", encoding="utf-8")
+            replaced = True
+        return rename_noreplace(anchor, source_name, destination_fd, destination_name)
+
+    monkeypatch.setattr(_filesystem.DirectoryAnchor, "rename_noreplace", replace_before_rename)
+
+    with pytest.raises(InvalidPathError, match="directory identity changed"):
+        manager.dir.encrypt(source)
+
+    assert replaced
+    assert (retained_original / "original.txt").read_text(encoding="utf-8") == "original"
+    assert (source / "replacement.txt").read_text(encoding="utf-8") == "replacement"
+    assert not any(
+        path.name.startswith(".fscryptography-txn-") is False and path.name != "original-directory"
+        for path in tmp_path.iterdir()
+        if path.is_dir()
+    )
