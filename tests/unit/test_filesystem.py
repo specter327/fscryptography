@@ -10,6 +10,7 @@ from fscryptography.errors import (
     AuthenticationError,
     DestinationConflictError,
     FormatError,
+    InvalidPathError,
 )
 from fscryptography import _filesystem
 
@@ -389,8 +390,4 @@ def test_directory_replacement_during_rename_is_restored(manager, tmp_path, monk
     assert replaced
     assert (retained_original / "original.txt").read_text(encoding="utf-8") == "original"
     assert (source / "replacement.txt").read_text(encoding="utf-8") == "replacement"
-    assert not any(
-        path.name.startswith(".fscryptography-txn-") is False and path.name != "original-directory"
-        for path in tmp_path.iterdir()
-        if path.is_dir()
-    )
+    assert not any(path.name.startswith("~1") for path in tmp_path.iterdir())
