@@ -14,14 +14,14 @@ La librería no debe inferir compatibilidad por el mero hecho de que Python o un
 
 | Dimensión | Objetivo inicial | Estado |
 |---|---|---|
-| Sistema operativo | Windows 11 x86-64 | Objetivo; GitHub Actions Windows no equivale a un cliente Windows 11, falta validación específica del cliente |
-| Sistema operativo | Ubuntu 22.04 LTS x86-64 | Objetivo; matriz de integración CI dedicada |
-| Sistema operativo | Ubuntu 24.04 LTS x86-64 | Objetivo; matriz de integración CI dedicada |
+| Sistema operativo | Windows 11 x86-64 | Objetivo; pendiente validación específica en cliente Windows 11. CI ejecutado en Windows Server 2025 Datacenter x86-64, build 26100 |
+| Sistema operativo | Ubuntu 22.04 LTS x86-64 | Integración CI aprobada en Ubuntu 22.04.5 LTS, x86-64 |
+| Sistema operativo | Ubuntu 24.04 LTS x86-64 | Integración CI aprobada en Ubuntu 24.04.5 LTS, x86-64 |
 | Python | CPython 3.11 | Objetivo; backend criptográfico validado en Ubuntu |
 | Python | CPython 3.12 | Objetivo; backend criptográfico validado en Ubuntu |
 | Python | CPython 3.13 | Objetivo; backend criptográfico validado en Ubuntu |
-| Filesystem Windows | NTFS local | Filesystem de referencia; falta validación integral |
-| Filesystem GNU/Linux | ext4 local | Filesystem de referencia; falta validación integral |
+| Filesystem Windows | NTFS local | Integración CI aprobada en volumen NTFS de Windows Server 2025; cliente Windows 11 pendiente |
+| Filesystem GNU/Linux | ext4 local | Integración CI aprobada en volúmenes ext4 de Ubuntu 22.04.5 y 24.04.5 |
 | Arquitectura | x86-64 | Objetivo inicial |
 
 La matriz anterior define el alcance que debe cubrir la validación; **no constituye una declaración de soporte ya alcanzado**.
@@ -147,3 +147,22 @@ Antes de publicar soporte v1 se debe:
 - [x] Añadir round-trip de filesystem con rutas largas, incluida una ruta Windows superior a MAX_PATH cuando el runner la soporta.
 - [ ] Fijar rangos runtime de dependencias y metadatos de empaquetado.
 - [ ] Declarar soporte únicamente después de que todas las pruebas requeridas pasen.
+
+
+## Evidencia de filesystem observada en CI
+
+La ejecución del workflow de integración con matriz explícita (GitHub Actions, run 33) completó **9/9 jobs**: Ubuntu 22.04, Ubuntu 24.04 y Windows, cada uno con CPython 3.11, 3.12 y 3.13.
+
+Los reportes de entorno identificaron:
+
+| Runner | SO/build observado | Filesystem del workspace |
+|---|---|---|
+| `ubuntu-22.04` | Ubuntu 22.04.5 LTS, x86-64 | ext4 |
+| `ubuntu-24.04` | Ubuntu 24.04.5 LTS, x86-64 | ext4 |
+| `windows-latest` | Microsoft Windows Server 2025 Datacenter, build 26100, 64-bit | NTFS, unidad de asignación de 4096 bytes |
+
+El runner Windows **no es Windows 11 cliente**. Por tanto, estos resultados prueban el comportamiento de la implementación sobre NTFS en Windows Server 2025; no sustituyen una validación específica sobre Windows 11.
+
+Los logs registran además kernel, versión exacta de Python, dependencias instaladas y opciones de montaje. En los runners Ubuntu observados, ext4 se montó con opciones que incluyen `nobarrier` y `data=writeback`. Por ello, estos resultados son pruebas de integración filesystem en el entorno CI, no ensayos de pérdida de energía ni evidencia de durabilidad física del dispositivo.
+
+La matriz demuestra ejecución sobre ext4 y NTFS en esos runners y versiones. No permite extrapolar a todas las configuraciones de montaje, dispositivos, builds de Windows o instalaciones locales.
