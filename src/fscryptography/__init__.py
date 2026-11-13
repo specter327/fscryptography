@@ -1,6 +1,6 @@
 """Filesystem-oriented cryptographic operations."""
 
-from .crypto import Crypto
+from .crypto import Manager, generate
 
 from .errors import (
     AtomicOperationError,
@@ -19,7 +19,8 @@ from .errors import (
 )
 
 __all__ = [
-    "Crypto",
+    "Manager",
+    "generate",
     "AtomicOperationError",
     "AuthenticationError",
     "BackendError",
