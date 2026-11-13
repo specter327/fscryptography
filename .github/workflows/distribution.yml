@@ -7,6 +7,7 @@ on:
       - ".github/workflows/distribution.yml"
       - "pyproject.toml"
       - "MANIFEST.in"
+      - "LICENSE"
       - "README.md"
       - "src/**"
       - "docs/**"
@@ -16,6 +17,7 @@ on:
       - ".github/workflows/distribution.yml"
       - "pyproject.toml"
       - "MANIFEST.in"
+      - "LICENSE"
       - "README.md"
       - "src/**"
       - "docs/**"
@@ -56,9 +58,10 @@ jobs:
         working-directory: ${{ runner.temp }}
         run: |
           python - <<'PY'
+          from importlib.metadata import version
           import fscryptography
 
-          assert fscryptography.__version__ == "0.1.0"
+          assert fscryptography.__version__ == version("fscryptography")
           key = fscryptography.generate()
           with fscryptography.Manager(key=key) as manager:
               assert manager.export_key() == key
