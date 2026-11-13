@@ -4,7 +4,7 @@
 
 Proporciona una interfaz de alto nivel basada en rutas, con procesamiento autenticado y segmentado de archivos. Su diseño es autónomo: no depende de herramientas de exploración de recursos ni de aplicaciones concretas.
 
-> **Estado del proyecto:** implementación inicial del paquete en curso. Ya existe el subsistema base de validación y codec de nombres; las operaciones de archivos/directorios, MasterKey y filesystem siguen pendientes.
+> **Estado del proyecto:** implementación inicial en curso. Están implementados la validación y codec de nombres, la generación/apertura del contenedor MasterKey v1 con keysets Tink reales y la fachada inicial `Crypto`. Las operaciones de cifrado/descifrado de archivos y directorios sobre rutas reales todavía no están implementadas.
 
 ## Alcance
 
@@ -17,7 +17,9 @@ Las operaciones sobre directorios transforman únicamente su nombre; no recorren
 
 ## Diseño
 
-El diseño criptográfico utiliza Google Tink como backend seleccionado para el prototipo de Streaming AEAD (`AES256_GCM_HKDF_1MB`). La generación, serialización y recuperación de keysets, así como los round-trips y rechazos de alteraciones, se validaron en CI con Python 3.10–3.13. Argon2id y AES-256-GCM para proteger el contenedor `MasterKey` también superaron pruebas de API en esa matriz. Esto valida las dependencias y composiciones probadas; no equivale a una implementación funcional, auditoría criptográfica ni validación multiplataforma.
+El diseño criptográfico utiliza Google Tink como backend para Streaming AEAD (`AES256_GCM_HKDF_1MB`) y AEAD convencional de nombres (`AES256_GCM`). La integración productiva genera, serializa, protege, abre y recupera keysets Tink independientes para contenido y nombres. El contenedor MasterKey protegido utiliza Argon2id y AES-256-GCM. Las pruebas automatizadas en CI validan las composiciones y los rechazos implementados; no equivalen a una auditoría criptográfica ni a validación multiplataforma.
+
+El formato de archivo está en especificación: existe una propuesta de cabecera mínima autenticada como AAD, pero la semántica de extensión y el contrato exacto de `new_extension` siguen pendientes de aprobación. No debe implementarse un formato provisional como definitivo.
 
 ## Independencia
 
@@ -31,9 +33,10 @@ La [documentación técnica](docs/index.md) contiene el alcance detallado, arqui
 
 El trabajo se realizará en este orden:
 
-1. Completar y validar la especificación en `docs/`.
-2. Implementar el paquete en `src/fscryptography/`.
-3. Construir la suite de pruebas en `tests/`.
-4. Preparar la distribución y publicación en PyPI.
+1. Completar y aprobar las especificaciones en `docs/`.
+2. Crear vectores golden y pruebas de conformidad para los formatos.
+3. Implementar el paquete en `src/fscryptography/`.
+4. Validar operaciones reales y garantías específicas de filesystem.
+5. Preparar la distribución y publicación en PyPI.
 
 No debe interpretarse la especificación como evidencia de que las funciones ya están implementadas.
