@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/backend-validation.yml"
       - "tests/backend_validation/**"
+      - "tests/master_key_format/**"
   pull_request:
     paths:
       - ".github/workflows/backend-validation.yml"
