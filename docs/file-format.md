@@ -54,7 +54,7 @@ Combinaciones válidas:
 
 Cuando `ORIGINAL_EXTENSION_PRESENT` está activo, los bytes desde el offset 16 hasta `header_length - 1` son exactamente la extensión original codificada en UTF-8 estricto. Se conserva la secuencia UTF-8 sin normalización Unicode. La extensión incluye el punto inicial cuando la política de extensión la reconoce como tal.
 
-Cuando el flag está apagado, `header_length` debe ser exactamente 16. Cuando está activo, `header_length` debe ser mayor que 16 y no superar 271 bytes (16 bytes fijos + máximo de 255 bytes para un componente de nombre).
+Cuando el flag está apagado, `header_length` debe ser exactamente 16. Cuando está activo, `header_length` debe ser mayor que 16 y no superar 1.036 bytes (16 bytes fijos + máximo conservador de 1.020 bytes UTF-8, correspondiente a 255 unidades UTF-16 de un componente Win32). El límite efectivo del filesystem y la longitud real del componente prevalecen; la implementación debe consultar y validar ambos cuando sea posible.
 
 No se permiten campos adicionales, extensiones desconocidas, bytes sobrantes dentro de la cabecera ni UTF-8 inválido. La extensión se trata como metadato no confiable hasta que el flujo Streaming AEAD haya autenticado correctamente la cabecera.
 
@@ -103,8 +103,8 @@ Ni el path absoluto, ni el nombre del padre, ni el nombre actual del archivo se 
 
 ## Límites y seguridad
 
-- La cabecera está limitada a 271 bytes.
-- El tamaño de metadatos de extensión está limitado a 255 bytes UTF-8.
+- La cabecera está limitada a 1.036 bytes.
+- El metadato de extensión está limitado a 1.020 bytes UTF-8 como cota estructural; el límite real del filesystem y la longitud del nombre completo pueden imponer un máximo menor.
 - El parser debe validar longitudes antes de leer el campo variable.
 - El modo de autenticación del contenido depende del keyset Streaming AEAD y de la cabecera como AAD.
 - La cabecera no cifra la extensión original. En modalidad de nombre visible, esta metadata queda autenticada pero no confidencial.
