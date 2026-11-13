@@ -391,6 +391,8 @@ def test_encrypted_and_decrypted_files_use_restrictive_mode(manager, tmp_path):
 
     assert not list(tmp_path.glob(".fscryptography-txn-*"))
     assert not list(tmp_path.glob(".journal-*"))
+    assert not list(tmp_path.glob(".fscryptography-result-*"))
+    assert not list(tmp_path.glob(".fscryptography-source-*"))
 
 
 def test_reparse_point_attribute_detection():
