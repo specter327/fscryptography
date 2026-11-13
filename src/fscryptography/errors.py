@@ -47,6 +47,3 @@ class ClosedInstanceError(FsCryptographyError):
 class AtomicOperationError(FsCryptographyError):
     """An atomic filesystem operation could not be completed safely."""
 
-
-class RecoveryError(AtomicOperationError):
-    """Rollback or recovery failed."""
