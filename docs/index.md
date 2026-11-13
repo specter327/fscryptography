@@ -16,7 +16,7 @@ Referencia técnica de la librería. El README es una presentación breve; las d
 - [Formato de archivos](file-format.md)
 - [Operaciones atómicas](atomic-operations.md)
 - [API pública](api-reference.md)
-- [Errores](errors.md)
+- [Errores y excepciones — contrato v1](errors.md)
 - [Modelo de seguridad](security-model.md)
 - [Compatibilidad](platform-compatibility.md)
 - [ADR 0001: diseño inicial](decisions/0001-initial-design.md)
