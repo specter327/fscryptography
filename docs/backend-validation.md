@@ -10,7 +10,7 @@ Fecha de revisión: 2026-11-12.
 
 | Área | Resultado | Conclusión |
 |---|---|---|
-| Tink Python: AEAD | API documentada | Puede crear primitivas AEAD y serializar keysets. |
+| Tink Python: AEAD | **Validado en CI** | `AES256_GCM` generó keysets, se serializó/recuperó y superó round-trip de nombres ASCII/Unicode y rechazos de autenticación en Tink 1.16.1 con Python 3.10–3.13. |
 | Tink Python: Streaming AEAD | **Validado en CI** | `AES256_GCM_HKDF_1MB` generó keysets, se serializó/recuperó y superó pruebas de cifrado autenticado en Tink 1.16.1 con Python 3.10–3.13 sobre Ubuntu 26.04. |
 | Serialización de keysets Tink | API binaria documentada | Puede utilizarse el formato Protobuf propio de Tink; requiere autorización explícita para material secreto. |
 | Argon2id | **Validado en CI** | Argon2id derivó 32 bytes y pasó pruebas de determinismo y variación por contraseña/salt en Python 3.10–3.13. |
@@ -61,7 +61,7 @@ Requisitos:
 - Parámetros y versión guardados en el contenedor.
 - Validación estricta del perfil antes de ejecutar Argon2id.
 - Longitud de salida fija de 32 bytes.
-- Perfil de producción v1 aprobado: versión 19, memory_cost 65.536 KiB, time_cost 3 y parallelism 1. El benchmark y las mediciones RSS del equipo de referencia están registrados en [Benchmark reproducible de Argon2id](argon2id-benchmark.md). Los límites de entrada y contraseña aún requieren confirmación contractual.
+- Perfil de producción v1 aprobado: versión 19, memory_cost 65.536 KiB, time_cost 3 y parallelism 1. El benchmark y las mediciones RSS del equipo de referencia están registrados en [Benchmark reproducible de Argon2id](argon2id-benchmark.md). Los límites de entrada y contraseña de MasterKey v1 están aprobados contractualmente.
 
 Los valores predeterminados de `PasswordHasher` no se adoptan automáticamente como parámetros normativos de fscryptography.
 
@@ -90,18 +90,18 @@ Cobertura:
 
 **Resultado observado — GitHub Actions Run 5:** [ejecución](https://github.com/specter327/fscryptography/actions/runs/43355002151), commit `94270e5250c2c2d8f50fbb078ec51e87613a6802`, conclusión `success`. Los ocho jobs de la matriz combinada finalizaron correctamente: cuatro jobs Tink Streaming AEAD y cuatro jobs de protección MasterKey. Los cuatro jobs MasterKey aprobaron seis tests cada uno (24 tests en total), con Python 3.10.22, 3.11.18, 3.12.16 y 3.13.18; en todos se instalaron `argon2-cffi 25.1.0` y `cryptography 46.0.7` sobre Linux x86_64/glibc 2.43.
 
-Los parámetros de Argon2id usados por esta prueba son deliberadamente modestos (`time_cost=1`, `memory_cost=8192 KiB`, `parallelism=1`) para una ejecución rápida en CI. **No son parámetros normativos ni recomendación de producción.** El perfil de producción v1 está aprobado por separado (Argon2id v19, 65.536 KiB, 3, p=1); sus límites de parsing y la política frente a entradas hostiles siguen sujetos a las decisiones pendientes indicadas en [la política Argon2id](argon2id-policy.md).
+Los parámetros de Argon2id usados por esta prueba son deliberadamente modestos (`time_cost=1`, `memory_cost=8192 KiB`, `parallelism=1`) para una ejecución rápida en CI. **No son parámetros normativos ni recomendación de producción.** El perfil de producción v1 está aprobado por separado (Argon2id v19, 65.536 KiB, 3, p=1); sus límites de parsing y la política frente a entradas hostiles están definidos en [la política Argon2id](argon2id-policy.md).
 
 El workflow instala `argon2-cffi>=23.1,<26` y `cryptography>=42,<47`, registra las versiones efectivas y ejecuta la prueba en Python 3.10–3.13. Resultado: los cuatro jobs finalizaron correctamente con seis tests aprobados por entorno.
 
 ## Arquitectura candidata resultante
 
 - **Archivos:** Streaming AEAD de Tink con AES256-GCM-HKDF-1MB, únicamente si la prueba de generación y round-trip del keyset pasa. Si no pasa, detener la selección del backend y evaluar alternativas; no implementar un protocolo propio.
-- **Nombres:** AEAD convencional de Tink con keyset independiente, sujeto a validar una plantilla y límites de longitud de nombres.
+- **Nombres:** Tink AEAD `AES256_GCM` con keyset independiente de tipo `Aead`, validado en CI; codificación textual y límite de longitud del componente aún pendientes.
 - **MasterKey protegido:** Argon2id de argon2-cffi para derivar 32 bytes y AES-256-GCM de cryptography para envolver el payload serializado. La API/composición tiene una prueba CI añadida; la validación de ejecución aún está pendiente.
 - **Keysets:** formato binario Protobuf soportado por Tink, contenido dentro del payload del contenedor; no definir un formato alternativo de keyset.
 
-Esta arquitectura es una propuesta de integración, no una selección definitiva de dependencias ni una afirmación de que el backend de archivos ya funciona.
+El perfil de nombre Tink `AES256_GCM` está validado como backend candidato del prototipo, no como implementación productiva. Esta validación no demuestra todavía operaciones sobre rutas/filesystems ni resuelve la codificación y el presupuesto de longitud del nombre.
 
 ## Ejecución automatizada de la prueba Tink Python
 
@@ -135,6 +135,21 @@ bloquea la selección de ese backend. No se interpreta como permiso para cambiar
 a AES-CTR-HMAC. Un workflow verde valida únicamente los entornos de CI
 ejecutados; no sustituye la matriz de sistemas operativos/plataformas objetivo
 ni la auditoría de seguridad.
+
+## Validación ejecutable de AEAD convencional para nombres
+
+El repositorio incluye `tests/backend_validation/test_tink_aead_names.py`. La prueba usa exclusivamente la plantilla Tink `AES256_GCM` y comprueba:
+
+1. Registro de AEAD y generación de un keyset mediante `tink.new_keyset_handle(...)`.
+2. Serialización binaria Protobuf y recuperación del keyset mediante el token de acceso secreto.
+3. Creación de la primitiva `Aead` a partir del keyset recuperado.
+4. Round-trip de plaintext vacío, ASCII, Unicode UTF-8 y datos de 255 bytes.
+5. Rechazo de AAD incorrecto, ciphertext alterado y ciphertext truncado.
+6. Overhead exacto de 33 bytes para el formato de salida TINK usado por esta plantilla: prefijo TINK de 5 bytes, nonce AES-GCM de 12 bytes y tag de 16 bytes.
+
+**Resultado observado — GitHub Actions Run 10:** [ejecución](https://github.com/specter327/fscryptography/actions/runs/43360635832), commit `8d4bbb3ef3cc307b9e90f015413dc2b930ab43ec`, conclusión `success`. Los doce jobs de la matriz combinada finalizaron correctamente: cuatro de Streaming AEAD, cuatro de AEAD para nombres y cuatro de protección MasterKey. La prueba de nombres aprobó en Python 3.10, 3.11, 3.12 y 3.13; los cuatro entornos utilizaron Tink `1.16.1`.
+
+**Conclusión:** la generación y recuperación del keyset Tink `AES256_GCM` de tipo `Aead` está validada para el prototipo. No equivale a validar el formato final de nombres, límites por filesystem, integración de MasterKey ni operaciones reales sobre rutas.
 
 ## Pruebas de validación obligatorias
 
