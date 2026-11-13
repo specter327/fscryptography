@@ -52,7 +52,7 @@ El contenedor protegido debe incluir, como mínimo:
 - Nonce de la operación AEAD de protección.
 - Ciphertext autenticado que contiene los keysets serializados.
 
-Los campos de cabecera que controlan la interpretación del contenedor deben autenticarse como AAD. El algoritmo AEAD concreto y sus parámetros se fijarán al validar las dependencias; no se implementarán primitivas propias.
+Los campos de cabecera que controlan la interpretación del contenedor deben autenticarse como AAD. El formato v1 utiliza AES-256-GCM para proteger el payload del contenedor. El perfil Argon2id y los límites de entrada están aprobados y definidos en [la política Argon2id](argon2id-policy.md); no se implementarán primitivas propias.
 
 `Crypto(master_key=..., password=...)` deriva la clave de protección y abre el contenedor. Una contraseña incorrecta, un contenedor alterado o uno malformado debe producir un error de inicialización; nunca debe generar silenciosamente keysets nuevos.
 
