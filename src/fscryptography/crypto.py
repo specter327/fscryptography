@@ -31,6 +31,9 @@ class Manager:
         material = _open_master_key_bytes(key_bytes, password=password)
         self._key: bytes | None = key_bytes
         self._material: _KeyMaterial | None = material
+        from ._filesystem import _DirectoryOperations, _FileOperations
+        self._file_operations = _FileOperations(self)
+        self._directory_operations = _DirectoryOperations(self)
 
     def _require_open(self) -> _KeyMaterial:
         if self._material is None or self._key is None:
@@ -44,6 +47,16 @@ class Manager:
     @property
     def _names_primitive(self):
         return self._require_open().names
+
+    @property
+    def file(self):
+        self._require_open()
+        return self._file_operations
+
+    @property
+    def dir(self):
+        self._require_open()
+        return self._directory_operations
 
     def change_key(self, new_key: str, *, password: str | None = None) -> None:
         """Replace the active context only after the new key opens successfully."""
