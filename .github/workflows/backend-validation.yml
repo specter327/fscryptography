@@ -7,7 +7,8 @@ on:
       - "src/**"
       - "tests/backend_validation/**"
       - "tests/master_key_format/**"
-      - "tests/unit/**"\n      - "tests/file_format/**"
+      - "tests/unit/**"
+      - "tests/file_format/**"
       - "pyproject.toml"
   pull_request:
     paths:
@@ -16,6 +17,7 @@ on:
       - "tests/backend_validation/**"
       - "tests/master_key_format/**"
       - "tests/unit/**"
+      - "tests/file_format/**"
       - "pyproject.toml"
   workflow_dispatch:
 
@@ -46,7 +48,7 @@ jobs:
           python -m pip install -e ".[test]"
 
       - name: Run package unit tests
-        run: python -m pytest -q tests/unit
+        run: python -m pytest -q tests/unit tests/file_format
 
   tink-streaming-aead:
     name: Tink Streaming AEAD / Python ${{ matrix.python-version }}
