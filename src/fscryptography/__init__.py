@@ -13,7 +13,6 @@ from .errors import (
     InvalidPathError,
     KeyDerivationError,
     NameConstraintError,
-    RecoveryError,
     UnsupportedFormatVersionError,
     UnsupportedResourceError,
 )
@@ -31,7 +30,6 @@ __all__ = [
     "InvalidPathError",
     "KeyDerivationError",
     "NameConstraintError",
-    "RecoveryError",
     "UnsupportedFormatVersionError",
     "UnsupportedResourceError",
 ]
