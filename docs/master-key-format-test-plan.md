@@ -52,7 +52,10 @@ Los fixtures criptográficos deben ser reproducibles. La generación aleatoria d
 | KDF | Misma contraseña, salt y parámetros | Misma clave derivada |
 | KDF | Cambiar contraseña o salt | Clave derivada diferente |
 | KDF | Variante o versión desconocida | Rechazo antes de derivar |
-| KDF | Parámetros por debajo/encima de límites | Rechazo antes de ejecutar Argon2id |
+| KDF | Parámetros distintos del perfil productivo permitido | Rechazo antes de ejecutar Argon2id |
+| KDF | Parámetros extremos de memoria, iteraciones o paralelismo | Rechazo temprano, sin invocar Argon2id |
+| Entrada | Base64 por encima del máximo o con caracteres/padding inválidos | Rechazo antes de decodificar completamente |
+| Contraseña | Vacía o superior a 1.024 bytes UTF-8 | Rechazo antes de ejecutar Argon2id |
 | Contraseña | Contraseña correcta | Apertura correcta |
 | Contraseña | Contraseña incorrecta | Fallo de autenticación, sin keysets |
 | AAD | Alterar cada campo de cabecera protegido | Rechazo estructural o de autenticación |
@@ -87,11 +90,13 @@ El fuzzing no sustituye vectores golden ni pruebas criptográficas.
 
 La fase de especificación del formato se considera cerrada cuando:
 1. [x] Se aprueba el layout binario v1 y sus límites.
-2. [ ] Se fijan los límites de contraseña y parámetros Argon2id.
+2. [ ] Se aprueban mediante benchmark el perfil Argon2id y los límites de entrada/contraseña de [la política de Argon2id](argon2id-policy.md).
 3. [ ] Se aprueba el perfil de nombres y su tipo de keyset.
 4. [~] Se publican vectores golden iniciales de estructura y envoltura; faltan vectores de keysets Tink válidos e inválidos.
 5. [ ] Se acuerda el catálogo de errores de parsing/autenticación.
 6. [ ] Se define la matriz de plataformas para ejecutar la conformidad.
+
+La política propuesta de producción parte de Argon2id v19 con 64 MiB, 3 iteraciones y paralelismo 1; exige aceptación estricta del perfil antes de ejecutar la KDF. Los valores de fixtures de bajo coste no deben ser aceptados por el parser productivo. El perfil y los límites siguen pendientes de benchmark y aprobación final; véase [Política de Argon2id y límites de apertura](argon2id-policy.md).
 
 La implementación funcional de archivos y directorios permanece bloqueada hasta completar esta fase.
 
