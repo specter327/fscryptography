@@ -181,15 +181,54 @@ def _check_source(path: Path, *, directory: bool) -> os.stat_result:
 def _open_source(path: Path, expected: os.stat_result) -> BinaryIO:
     """Open the previously inspected regular file without following symlinks.
 
-    O_NOFOLLOW closes the lstat/open symlink substitution window on Linux.
+    GNU/Linux uses O_NOFOLLOW. Windows opens the file with FILE_SHARE_DELETE
+    so another operation can atomically stage the source after its own handle
+    has closed, even while competing readers still hold compatible handles.
     The descriptor identity is checked again after open on every platform.
     The returned stream owns the descriptor.
     """
-    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags)
+    if os.name == "nt":
+        import msvcrt
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateFileW.argtypes = (
+            wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+            wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
+        )
+        kernel32.CreateFileW.restype = wintypes.HANDLE
+        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        kernel32.CloseHandle.restype = wintypes.BOOL
+
+        # GENERIC_READ; share read/write/delete; OPEN_EXISTING;
+        # OPEN_REPARSE_POINT prevents following a substituted reparse point.
+        handle = kernel32.CreateFileW(
+            str(path),
+            0x80000000,
+            0x00000001 | 0x00000002 | 0x00000004,
+            None,
+            3,
+            0x00200000,
+            None,
+        )
+        invalid_handle = ctypes.c_void_p(-1).value
+        if handle == invalid_handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            descriptor = msvcrt.open_osfhandle(
+                int(handle), os.O_RDONLY | getattr(os, "O_BINARY", 0)
+            )
+            handle = None  # The CRT descriptor now owns the native handle.
+        finally:
+            if handle not in (None, invalid_handle):
+                kernel32.CloseHandle(handle)
+    else:
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags)
+
     try:
         current = os.fstat(descriptor)
-        if not stat.S_ISREG(current.st_mode):
+        if not stat.S_ISREG(current.st_mode) or _is_reparse_point(current):
             raise UnsupportedResourceError("resource is not a regular file")
         if current.st_nlink != 1:
             raise UnsupportedResourceError(
