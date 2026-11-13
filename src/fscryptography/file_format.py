@@ -56,7 +56,6 @@ def validate_extension(extension: str | None, *, allow_none: bool = True) -> str
         not extension.startswith(".")
         or extension.startswith("..")
         or len(extension) < 2
-        or any(char in extension for char in ("/", "\x00", "\\", ":", "*", "?", '"', "<", ">", "|"))
         or any(ord(char) < 0x20 for char in extension)
     ):
         raise ValueError("extension must be a valid single-component suffix")
