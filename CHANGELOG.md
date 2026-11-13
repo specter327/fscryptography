@@ -15,8 +15,6 @@ Los cambios de API, formatos, compatibilidad y seguridad se registran aquí. Las
 - Cada operación conserva una instantánea coherente de primitivas durante la rotación de Manager.
 - Se documenta que change_key() no re-encripta recursos existentes y que close() no garantiza borrado seguro de memoria.
 - Se precisa el alcance de compatibilidad: Windows Server 2025/NTFS está probado en CI; Windows 11 cliente sigue pendiente.
-
-### Changed
 - Se eliminan los directorios transaccionales persistentes; los temporales de resultado y staging son entradas hermanas efímeras. No hay recuperación automática tras interrupciones abruptas.
 
 ### Security
