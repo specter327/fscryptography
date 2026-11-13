@@ -1,42 +1,127 @@
 # fscryptography
 
-**fscryptography** (*filesystem-cryptography*) es una librería Python para cifrar y descifrar archivos y nombres de archivos y directorios de un sistema de archivos.
+**fscryptography** (*filesystem-cryptography*) es una librería Python para cifrar y descifrar archivos y nombres de archivos y directorios directamente sobre rutas del sistema de archivos.
 
-Proporciona una interfaz de alto nivel basada en rutas, con procesamiento autenticado y segmentado de archivos. Su diseño es autónomo: no depende de herramientas de exploración de recursos ni de aplicaciones concretas.
+Proporciona una API de alto nivel basada en rutas, cifrado autenticado y procesamiento segmentado para archivos grandes. No depende de herramientas de exploración de recursos ni de aplicaciones concretas.
 
-> **Estado del proyecto:** implementación inicial en curso. Están implementados el contenedor MasterKey v1, el codec de nombres, la cabecera binaria de archivo v1.0 y las operaciones `Manager.file` / `Manager.dir` sobre rutas reales. Las operaciones de contenido usan Tink Streaming AEAD y temporales privados; la publicación no-replace usa `renameat2(RENAME_NOREPLACE)` en GNU/Linux y `os.rename` en Windows. En GNU/Linux también se sincroniza el directorio padre después de publicar y retirar recursos. El journal persistente v1 y la inspección explícita de solo lectura están implementados inicialmente; no hay recuperación destructiva ni limpieza automática.
+## Instalación
 
-## Alcance
+Requiere Python 3.11 o posterior.
 
-- Cifrado y descifrado del contenido de archivos.
-- Cifrado y descifrado de nombres de archivos y directorios.
-- Procesamiento segmentado interno para archivos grandes.
-- Metadatos autocontenidos para recuperar los recursos cifrados.
+```bash
+python -m pip install fscryptography
+```
 
-Las operaciones sobre directorios transforman únicamente su nombre; no recorren ni cifran su contenido. La librería no ofrece una API pública de cifrado de bytes o streams, exploración recursiva ni operaciones por lotes.
+## Inicio rápido
 
-## Diseño
+```python
+from pathlib import Path
 
-El diseño criptográfico utiliza Google Tink como backend para Streaming AEAD (`AES256_GCM_HKDF_1MB`) y AEAD convencional de nombres (`AES256_GCM`). La integración productiva genera, serializa, protege, abre y recupera keysets Tink independientes para contenido y nombres. El contenedor MasterKey protegido utiliza Argon2id y AES-256-GCM. Las pruebas automatizadas en CI validan las composiciones y los rechazos implementados; no equivalen a una auditoría criptográfica ni a validación multiplataforma.
+import fscryptography
 
-El formato binario de archivo v1.0 está definido e implementado: la cabecera completa se autentica como AAD y almacena las extensiones original y de salida cuando el nombre permanece visible. `new_extension=None` selecciona `.fscrypt`, `""` elimina el sufijo visible y un valor como `.locked` establece uno personalizado. Con `encrypt_name=True` se cifra el nombre completo.
+# Genera una clave maestra aleatoria codificada en Base64.
+master_key = fscryptography.generate()
 
-## Independencia
+# Guarda la clave de forma segura fuera del directorio que se cifra.
+# Quien obtenga la clave podrá descifrar los recursos protegidos.
 
-fscryptography opera sobre rutas y no depende de fsresource-tree. Puede utilizarse junto con librerías externas de exploración y orquestación, pero esa integración pertenece a la aplicación consumidora.
+with fscryptography.Manager(key=master_key) as manager:
+    manager.file.encrypt(Path("document.txt"))
+    manager.file.decrypt(Path("document.fscrypt"))
+```
+
+Para proteger el contenedor de clave maestra con contraseña:
+
+```python
+master_key = fscryptography.generate(password="correct horse battery staple")
+
+with fscryptography.Manager(
+    key=master_key,
+    password="correct horse battery staple",
+) as manager:
+    manager.file.encrypt("confidential.pdf", encrypt_name=True)
+```
+
+La contraseña se consume al abrir el contenedor y no se conserva en el gestor. No debe confundirse la contraseña con una copia de seguridad de la clave: conserva la cadena Base64 de la MasterKey en un lugar seguro.
+
+## API principal
+
+```python
+import fscryptography
+
+master_key = fscryptography.generate()
+# O bien: fscryptography.generate(password="...")
+
+manager = fscryptography.Manager(key=master_key)
+# Para una MasterKey protegida: Manager(key=master_key, password="...")
+
+manager.file.encrypt("report.txt")
+manager.file.encrypt("archive.tar.gz", new_extension=".locked")
+manager.file.encrypt("private.txt", encrypt_name=True)
+manager.file.decrypt("report.fscrypt")
+
+manager.dir.encrypt("private-directory")
+manager.dir.decrypt("~1...")
+
+records = manager.inspect_recovery("/path/to/parent")  # Inspección de solo lectura
+exported_key = manager.export_key()
+manager.close()
+```
+
+Las operaciones de directorio transforman exclusivamente el nombre del directorio: **no recorren ni cifran su contenido**. La librería no ofrece una API pública de cifrado genérico de bytes o streams.
+
+## Diseño criptográfico
+
+- Google Tink para Streaming AEAD de contenido (`AES256_GCM_HKDF_1MB`) y AEAD de nombres (`AES256_GCM`).
+- Argon2id y AES-256-GCM para proteger una MasterKey cuando se especifica contraseña.
+- Keysets independientes para contenido y nombres.
+- Formatos versionados y metadata de archivo autenticada.
+- Operaciones de filesystem diseñadas para evitar sobrescrituras accidentales y preservar información de transacciones interrumpidas.
+
+## Compatibilidad y límites
+
+- Python 3.11+.
+- GNU/Linux y Windows.
+- En GNU/Linux se utilizan operaciones relativas a descriptores de directorio y publicación no-replace cuando el sistema las soporta.
+- En Windows existen diferencias documentadas: no se ofrece el mismo anclaje de directorio ni la misma garantía de cuarentena del origen.
+- No se garantiza protección frente a procesos hostiles que operen bajo el mismo UID/usuario.
+- Las semánticas de durabilidad y renombrado de sistemas de archivos alternativos o de red no están validadas exhaustivamente.
+
+La inspección del journal es explícita y de solo lectura. No hay recuperación destructiva ni limpieza automática de transacciones completadas.
+
+## Seguridad
+
+Esta librería manipula claves criptográficas y archivos del usuario. Revisa el [modelo de seguridad](docs/security-model.md), la [política de gestión de claves](docs/key-management.md), la [compatibilidad de plataformas](docs/platform-compatibility.md) y la [documentación técnica](docs/index.md) antes de integrarla en un flujo sensible.
+
+La protección criptográfica no sustituye las copias de seguridad, el control de acceso del sistema operativo ni una política de gestión y rotación de claves. La implementación y sus pruebas automatizadas no equivalen a una auditoría criptográfica independiente.
+
+## Desarrollo
+
+Instala las dependencias de desarrollo:
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+Ejecuta las pruebas:
+
+```bash
+python -m pytest
+```
+
+Construye y valida los artefactos de distribución:
+
+```bash
+python -m build
+python -m twine check dist/*
+```
+
+El proyecto utiliza un diseño `src/` y publica un wheel y un source distribution (sdist). La publicación a PyPI se automatiza mediante GitHub Actions y Trusted Publishing (OIDC); no requiere almacenar un token PyPI de larga duración en los secretos del repositorio.
+
+## Estado
+
+Versión inicial de distribución: **0.1.0**. El proyecto continúa en fase alpha. Consulta [GitHub Releases](https://github.com/specter327/fscryptography/releases) para conocer las versiones publicadas y sus notas.
 
 ## Documentación
 
-La API pública expone `fscryptography.generate()` y `fscryptography.Manager(key=...)`, con operaciones `manager.file.encrypt/decrypt()` y `manager.dir.encrypt/decrypt()`. La [documentación técnica](docs/index.md) contiene el alcance detallado, arquitectura, diseño criptográfico, gestión de claves, formatos, operaciones atómicas, protocolo de recuperación, API, errores, modelo de seguridad y compatibilidad.
-
-## Estado de desarrollo
-
-El trabajo se realizará en este orden:
-
-1. Ampliar vectores golden, pruebas negativas y mutación de formatos.
-2. Validar el comportamiento en Windows/NTFS y GNU/Linux/ext4 reales.
-3. Ampliar pruebas de interrupción, concurrencia y seguridad del journal; después diseñar resolución explícita y retención segura.
-4. Completar durabilidad multiplataforma y pruebas de concurrencia.
-5. Consolidar la documentación, distribución y publicación en PyPI.
-
-No debe interpretarse la especificación como evidencia de que las funciones ya están implementadas.
+La documentación normativa y técnica está en [docs/](docs/index.md). El [contrato de API](docs/api-reference.md) describe las operaciones, retornos y excepciones.
