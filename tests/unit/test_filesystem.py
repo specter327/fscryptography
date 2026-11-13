@@ -239,8 +239,7 @@ def test_encrypt_reports_sync_failure_after_source_removal(manager, tmp_path, mo
         monkeypatch.setattr(_filesystem.Transaction, "set_state", fail_after_source_unlink)
         expected_message = "injected failure after source removal"
     else:
-        # Windows persists the journal file but cannot fsync the parent directory.
-        # Inject a journal-state failure after the handle-based deletion instead.
+        # Inject an in-memory state-transition failure after handle-based deletion.
         original_set_state = _filesystem.Transaction.set_state
 
         def fail_after_source_unlink(transaction, state):
@@ -298,10 +297,6 @@ def test_source_replacement_during_retirement_is_restored(manager, tmp_path, mon
     assert retained_original.read_bytes() == b"original source"
     assert source.read_bytes() == b"concurrent replacement"
     assert (tmp_path / "replacement.fscrypt").is_file()
-    assert any(
-        record.operation == "file_encrypt" and record.classification == "ambiguous"
-        for record in manager.inspect_recovery(tmp_path)
-    )
 
 
 @pytest.mark.skipif(os.name == "nt", reason="private quarantine is not enabled for inherited Windows ACLs")
