@@ -6,7 +6,6 @@ from threading import Barrier
 import pytest
 
 import fscryptography
-from fscryptography import AuthenticationError
 
 
 @pytest.fixture
@@ -60,7 +59,7 @@ def test_competing_encryption_of_same_source_never_publishes_multiple_results(
 ):
     """Two callers racing on one source must not create two valid outcomes."""
     source = tmp_path / "contended.bin"
-    payload = b"single-source contention payload\x00" * 8192
+    payload = b"single-source contention payload\\x00" * 8192
     source.write_bytes(payload)
 
     barrier = Barrier(2)
@@ -69,7 +68,7 @@ def test_competing_encryption_of_same_source_never_publishes_multiple_results(
         barrier.wait(timeout=10)
         try:
             manager.file.encrypt(source)
-        except Exception as error:  # Capture the losing operation's public failure.
+        except Exception as error:
             return error
         return None
 
@@ -77,6 +76,7 @@ def test_competing_encryption_of_same_source_never_publishes_multiple_results(
         outcomes = list(executor.map(lambda _: encrypt(), range(2)))
 
     assert sum(outcome is None for outcome in outcomes) == 1
+    assert sum(isinstance(outcome, Exception) for outcome in outcomes) == 1
 
     encrypted = tmp_path / "contended.fscrypt"
     assert encrypted.is_file()
