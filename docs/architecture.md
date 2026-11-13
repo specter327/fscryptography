@@ -14,7 +14,7 @@ La API pública, las operaciones de filesystem, el formato y el backend criptogr
 - Format: cabeceras, metadatos y versionado.
 - Filesystem operations: rutas, temporales, publicación no-replace, sincronización y manejo de fallos.
 - Cryptographic backend: integración interna de Tink, Argon2id y AES-GCM de envoltura.
-- Transaction journal (diseño): registro persistente de operaciones interrumpidas e inspección explícita de sus identidades.
+- Transaction journal: registro persistente de operaciones y diagnóstico explícito de solo lectura, con validación de esquema e identidades de recursos.
 
 Esta división define responsabilidades, no obliga a crear un archivo por componente.
 
