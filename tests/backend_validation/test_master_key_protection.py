@@ -7,6 +7,7 @@ not production container parsing, parameter-policy, or filesystem tests.
 
 from __future__ import annotations
 
+import os
 import platform
 import sys
 import unittest
@@ -56,8 +57,7 @@ class MasterKeyProtectionBackendValidation(unittest.TestCase):
         print(f"Argon2 version: {ARGON2_VERSION}")
         cls.key = derive_wrapping_key(PASSWORD)
         cls.aead = AESGCM(cls.key)
-        cls.nonce = AESGCM.generate_key  # API presence probe; nonce generated below.
-        cls.iv = bytes.fromhex("a0a1a2a3a4a5a6a7a8a9aaab")
+        cls.iv = os.urandom(12)
         cls.ciphertext = cls.aead.encrypt(cls.iv, PAYLOAD, AAD)
 
     def test_argon2id_returns_32_bytes(self):
