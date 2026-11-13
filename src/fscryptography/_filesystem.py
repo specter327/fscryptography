@@ -162,6 +162,10 @@ def _check_source(path: Path, *, directory: bool) -> os.stat_result:
         raise UnsupportedResourceError("resource is not a directory")
     if not directory and not stat.S_ISREG(info.st_mode):
         raise UnsupportedResourceError("resource is not a regular file")
+    if not directory and info.st_nlink != 1:
+        raise UnsupportedResourceError(
+            "files with multiple hard links are not supported; other links would retain the original content"
+        )
     return info
 
 
@@ -178,6 +182,10 @@ def _open_source(path: Path, expected: os.stat_result) -> BinaryIO:
         current = os.fstat(descriptor)
         if not stat.S_ISREG(current.st_mode):
             raise UnsupportedResourceError("resource is not a regular file")
+        if current.st_nlink != 1:
+            raise UnsupportedResourceError(
+                "files with multiple hard links are not supported; other links would retain the original content"
+            )
         if (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino):
             raise InvalidPathError("source changed while the operation was starting")
         return os.fdopen(descriptor, "rb")
@@ -196,6 +204,10 @@ def _check_source_at(anchor: DirectoryAnchor, name: str, *, directory: bool) -> 
         raise UnsupportedResourceError("resource is not a directory")
     if not directory and not stat.S_ISREG(info.st_mode):
         raise UnsupportedResourceError("resource is not a regular file")
+    if not directory and info.st_nlink != 1:
+        raise UnsupportedResourceError(
+            "files with multiple hard links are not supported; other links would retain the original content"
+        )
     return info
 
 
@@ -205,6 +217,10 @@ def _open_source_at(anchor: DirectoryAnchor, name: str, expected: os.stat_result
         current = os.fstat(descriptor)
         if not stat.S_ISREG(current.st_mode):
             raise UnsupportedResourceError("resource is not a regular file")
+        if current.st_nlink != 1:
+            raise UnsupportedResourceError(
+                "files with multiple hard links are not supported; other links would retain the original content"
+            )
         if (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino):
             raise InvalidPathError("source changed while the operation was starting")
         return os.fdopen(descriptor, "rb")
@@ -268,11 +284,13 @@ def _assert_source_unchanged(stream: BinaryIO, expected: os.stat_result) -> None
     identity_after = (current.st_dev, current.st_ino)
     metadata_before = (
         expected.st_size,
+        expected.st_nlink,
         getattr(expected, "st_mtime_ns", int(expected.st_mtime * 1_000_000_000)),
         getattr(expected, "st_ctime_ns", int(expected.st_ctime * 1_000_000_000)),
     )
     metadata_after = (
         current.st_size,
+        current.st_nlink,
         getattr(current, "st_mtime_ns", int(current.st_mtime * 1_000_000_000)),
         getattr(current, "st_ctime_ns", int(current.st_ctime * 1_000_000_000)),
     )
