@@ -40,7 +40,9 @@ El payload lógico contiene, como mínimo, dos keysets independientes:
 
 Los keysets se generan independientemente mediante el backend criptográfico. No se derivan ambos dominios reutilizando directamente una misma clave AEAD.
 
-La serialización debe utilizar el mecanismo soportado por el backend seleccionado. No se inventará un formato de keyset propio ni se expondrá su estructura mediante la API pública. La viabilidad de exportar, importar y conservar de forma segura keysets en la implementación Python de Tink debe comprobarse antes de fijar el esquema de payload.
+La serialización debe utilizar el mecanismo soportado por el backend seleccionado. Tink Python documenta serialización binaria Protobuf de keysets, pero requiere un token explícito para acceder al material secreto. Ese mecanismo debe permanecer confinado al módulo interno de gestión de claves. No se inventará un formato de keyset propio ni se expondrá su estructura mediante la API pública.
+
+La generación del keyset Streaming AEAD con la plantilla AES256-GCM-HKDF-1MB en Tink Python continúa pendiente de una prueba ejecutable. Véase [Validación del backend criptográfico](backend-validation.md).
 
 ## Modo aleatorio
 
@@ -51,6 +53,8 @@ Por diseño, este modo no ofrece autenticación criptográfica del contenedor fr
 ## Modo protegido mediante contraseña
 
 El modo protegido utiliza Argon2id para derivar una clave de envoltura a partir de la contraseña y un salt aleatorio. Esa clave protege el payload mediante un esquema AEAD seleccionado y validado antes de implementar.
+
+La integración candidata es Argon2id de `argon2-cffi` y AES-GCM de `cryptography` para el payload acotado del contenedor. La elección de versiones mínimas y los parámetros de coste siguen pendientes de validación de ejecución y plataformas.
 
 El contenedor incluye:
 
@@ -85,10 +89,10 @@ La contraseña no se almacena. Al abrir el contenedor, una contraseña incorrect
 
 Antes de implementar deben cerrarse:
 
-- API real de serialización y carga de keysets en el backend Python elegido.
-- Disponibilidad y formato de exportación segura de keysets.
-- Algoritmo AEAD de envoltura y biblioteca que lo implementará.
+- Generación y round-trip del keyset Streaming AEAD AES256-GCM-HKDF-1MB en una versión fijada de Tink Python.
+- Compatibilidad del backend y sus dependencias en las plataformas objetivo.
 - Parámetros y límites de Argon2id.
+- Versión mínima de `cryptography` y compatibilidad de AES-GCM.
 - Disposición binaria exacta, tamaños máximos y límites de parsing.
 - Normalización Unicode y límites de contraseña.
 - Política concreta de compatibilidad y migración.
