@@ -66,7 +66,7 @@ La validación debe cubrir, como mínimo:
 - ACL, permisos, archivos abiertos/bloqueados y errores de rename/reemplazo.
 - Comportamiento con antivirus u otros procesos que mantengan handles abiertos.
 
-No se debe asumir que una ruta válida en GNU/Linux es representable en Windows.
+El perfil conservador de nombres Windows y las reglas de validación antes de restaurar plaintext se definen en [Cifrado de nombres](filename-encryption.md). No se debe asumir que una ruta válida en GNU/Linux es representable en Windows.
 
 ### ext4 / GNU/Linux
 
@@ -90,8 +90,6 @@ La API acepta rutas de archivos y directorios, pero el soporte de tipos de entra
 - No permitir que una validación de ruta obsoleta se trate como garantía frente a cambios concurrentes externos.
 - No recorrer directorios ni cifrar sus contenidos: el alcance de la librería se limita al recurso indicado y, para directorios, a su propio nombre.
 
-Los detalles de nombres reservados, equivalencia/casefold y tratamiento de nombres ya cifrados deben quedar definidos en [Cifrado de nombres](filename-encryption.md) antes de cerrar la compatibilidad de nombres entre Windows y GNU/Linux.
-
 ## Atomicidad y durabilidad
 
 Un rename dentro del mismo filesystem suele ser una operación atómica de namespace, pero reemplazo, persistencia y durabilidad dependen de la plataforma y del filesystem.
@@ -102,6 +100,7 @@ Un rename dentro del mismo filesystem suele ser una operación atómica de names
 - Ante errores controlables, preservar el original y limpiar temporales cuando sea seguro.
 - Evaluar flush/fsync y sincronización del directorio según las capacidades de cada plataforma.
 - No prometer atomicidad transaccional de varias modificaciones (por ejemplo, contenido y nombre) sin un mecanismo explícito de recuperación.
+- Para cambios de nombre, usar publicación que falle si el destino existe; una comprobación previa de existencia no es suficiente frente a carreras externas.
 
 La validación debe registrar el estado observable del origen, destino y temporales después de cada fallo inducido. Las garantías y límites generales se documentan en [Operaciones atómicas](atomic-operations.md).
 
@@ -140,9 +139,9 @@ Antes de publicar soporte v1 se debe:
 
 - [x] Definir una matriz objetivo inicial: Windows 11 y Ubuntu 22.04/24.04 LTS, x86-64, CPython 3.11–3.13, NTFS/ext4.
 - [x] Separar evidencia de backend criptográfico de validación integral de filesystem.
+- [x] Definir contrato de nombres reservados Windows, UTF-8 estricto y semántica de equivalencia/casefold por filesystem.
 - [ ] Añadir CI de backend para Windows y todas las versiones Python objetivo.
 - [ ] Ejecutar pruebas integrales de filesystem en NTFS y ext4.
 - [ ] Definir el contrato de rutas `PathLike` y validar rutas largas.
-- [ ] Cerrar nombres reservados, casefold/equivalencias y nombres ya cifrados.
 - [ ] Fijar rangos runtime de dependencias y metadatos de empaquetado.
 - [ ] Declarar soporte únicamente después de que todas las pruebas requeridas pasen.
