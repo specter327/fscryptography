@@ -306,6 +306,19 @@ Flujo simplificado de una transformación de archivo:
 
 La implementación no debe publicar plaintext parcial como resultado definitivo. La semántica de durabilidad y las garantías de operaciones del filesystem dependen de la plataforma.
 
+
+## Evidencia de ejecución real
+
+La siguiente lámina resume una ejecución manual reportada en **Ubuntu 24.04, Linux x86_64 y Python 3.12.3**. Se han censurado la ruta de trabajo y los identificadores del entorno. Es una **reconstrucción vectorial de la salida y los resultados**, no una captura binaria del terminal original.
+
+<div align="center">
+  <img src="assets/manual-test-ubuntu-24.04.svg" alt="Resumen visual censurado de la prueba manual de fscryptography en Ubuntu 24.04: 15 de 16 comprobaciones correctas" width="100%">
+</div>
+
+**Resultado informado: 15/16 comprobaciones correctas (93,75 %).** Las operaciones de cifrado y descifrado verificadas conservaron la integridad de los datos mediante SHA-256, incluidos archivos de hasta 1 MiB. La única comprobación fallida fue una invocación incompatible de la API: se pasó `new_extension` junto con `encrypt_name=True`, combinación que la API rechaza intencionalmente. Para cifrar el nombre se debe omitir `new_extension`.
+
+Esta evidencia documenta una ejecución en un entorno concreto; no sustituye las pruebas automatizadas, las pruebas de endurecimiento ni la validación multiplataforma. No se muestran claves, contraseñas, contenido privado ni rutas personales.
+
 ## Diseño criptográfico
 
 | Dominio | Tecnología | Uso |
