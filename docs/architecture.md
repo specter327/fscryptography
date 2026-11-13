@@ -1,30 +1,42 @@
 # Arquitectura
 
 ## Principios
-La API pública, las operaciones de filesystem, el formato y el backend criptográfico deben mantener responsabilidades separadas. La arquitectura interna no debe filtrar objetos específicos del backend a la API pública.
+
+La API pública, las operaciones de filesystem, el formato y el backend criptográfico mantienen responsabilidades separadas. La arquitectura interna no debe filtrar objetos específicos del backend a la API pública.
 
 ## Componentes lógicos
+
 - Crypto: inicialización, ciclo de vida y fachada de operaciones.
 - File operations: cifrado y descifrado del contenido.
 - Directory operations: transformación del nombre de directorio.
 - Name codec: codificación y validación de nombres cifrados.
 - Key management: generación, derivación, parsing y separación de claves.
-- Format: encabezados, metadatos y versionado.
+- Format: cabeceras, metadatos y versionado.
 - Filesystem operations: rutas, temporales, publicación y rollback.
-- Cryptographic backend: integración interna del backend elegido.
+- Cryptographic backend: integración interna de Tink, Argon2id y AES-GCM de envoltura.
 
 Esta división define responsabilidades, no obliga a crear un archivo por componente.
 
 ## Dependencias
-La biblioteca estándar proporciona I/O, rutas y operaciones de sistema. Una biblioteca criptográfica mantenida proporciona las primitivas. Argon2id se integra mediante implementación mantenida si el backend AEAD no proporciona esa KDF.
 
-Google Tink es el candidato prioritario para Streaming AEAD, pendiente de validar API Python, perfiles, serialización y empaquetado. La primera versión tendrá un backend, no una arquitectura de backends intercambiables.
+La biblioteca estándar proporciona I/O, rutas y operaciones de sistema. Google Tink proporciona las primitivas AEAD y Streaming AEAD. Argon2id se integra mediante argon2-cffi y AES-GCM de envoltura mediante cryptography.
 
-## Flujo de cifrado
-Validar origen y destino; preparar claves; crear temporal exclusivo en el mismo filesystem; leer y cifrar secuencialmente; finalizar el formato autenticado; preparar el nombre de destino; publicar; retirar el origen solo después de confirmar la publicación; limpiar recursos temporales.
+La primera versión utiliza un único backend criptográfico; no se diseña una arquitectura de backends intercambiables.
 
-## Flujo de descifrado
-Reconocer y validar el formato; preparar temporal privado; descifrar y autenticar todos los segmentos; validar el cierre; preparar el nombre original; publicar únicamente tras autenticación completa; limpiar temporales y secretos de mejor esfuerzo.
+## Estado de componentes
+
+- **Implementado:** validación de nombres, codec de nombres Tink, generación/apertura de MasterKey, recuperación de keysets Tink y fachada inicial Crypto.
+- **Especificado parcialmente:** formato binario de archivo con cabecera autenticada como AAD y flujo Streaming AEAD directo. La semántica de extensión y el contrato de new_extension siguen pendientes.
+- **Pendiente:** operaciones reales sobre rutas, temporales, publicación sin sobrescritura, rollback y validación en filesystems objetivo.
+
+## Flujo de cifrado previsto
+
+Validar origen y destino; preparar claves; crear temporal exclusivo en el mismo filesystem; escribir la cabecera de formato y cifrar secuencialmente hacia el temporal; finalizar el flujo autenticado; preparar y validar el nombre de destino; publicar sin reemplazar destinos existentes; retirar el original solo después de confirmar la publicación; limpiar recursos temporales.
+
+## Flujo de descifrado previsto
+
+Reconocer y validar la cabecera; preparar temporal privado; descifrar y autenticar todos los segmentos; validar el cierre; preparar y validar el nombre original; publicar únicamente tras autenticación completa; limpiar temporales y secretos de mejor esfuerzo.
 
 ## Restricciones
+
 No implementar primitivas propias. No publicar plaintext parcial. No sobrescribir destinos por defecto. No asumir que múltiples renames forman una transacción. No prometer borrado seguro absoluto de secretos en memoria Python.
