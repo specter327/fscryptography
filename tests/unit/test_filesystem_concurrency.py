@@ -7,6 +7,7 @@ from threading import Barrier
 import pytest
 
 import fscryptography
+import fscryptography._filesystem as _filesystem
 
 
 @pytest.fixture
@@ -76,7 +77,7 @@ def test_competing_encryption_of_same_source_never_publishes_multiple_results(
     with ThreadPoolExecutor(max_workers=2) as executor:
         outcomes = list(executor.map(lambda _: encrypt(), range(2)))
 
-    assert sum(outcome is None for outcome in outcomes) == 1
+    assert sum(outcome is None for outcome in outcomes) == 1, outcomes
     assert sum(isinstance(outcome, Exception) for outcome in outcomes) == 1
 
     encrypted = tmp_path / "contended.fscrypt"
@@ -308,3 +309,19 @@ def test_in_flight_operation_completes_with_snapshot_after_manager_close(
     with fscryptography.Manager(key) as original_context:
         original_context.file.decrypt(encrypted)
     assert source.read_bytes() == payload
+
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows file-sharing semantics")
+def test_windows_source_handle_allows_staging_while_reader_is_open(tmp_path):
+    source = tmp_path / "share-delete.bin"
+    source.write_bytes(b"source remains readable through the open handle")
+    expected = _filesystem._check_source(source, directory=False)
+    retained = tmp_path / ".fscryptography-source-test"
+
+    with _filesystem._open_source(source, expected) as reader:
+        os.rename(source, retained)
+        assert reader.read() == b"source remains readable through the open handle"
+
+    assert retained.read_bytes() == b"source remains readable through the open handle"
+    assert not source.exists()
