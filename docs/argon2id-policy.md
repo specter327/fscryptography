@@ -106,4 +106,4 @@ Debe existir al menos una prueba que confirme que el parser productivo rechaza l
 - [x] Confirmar los límites de entrada y contraseña como parte del contrato normativo de MasterKey v1.
 - [ ] Añadir pruebas del parser productivo que verifiquen rechazo previo a KDF y límites de concurrencia/admisión si se implementa.
 
-El perfil criptográfico y los límites de entrada de MasterKey v1 están aprobados. La implementación productiva y sus pruebas siguen pendientes.
+El perfil criptográfico y los límites de entrada de MasterKey v1 están aprobados. La implementación productiva está presente. Las pruebas cubren el rechazo temprano del perfil y de contraseñas fuera de límite; siguen pendientes pruebas específicas de carga/concurrencia si el proyecto decide incorporar una política de admisión.
