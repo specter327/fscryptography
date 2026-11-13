@@ -110,7 +110,7 @@ def test_real_filesystem_resources() -> None:
         _assert(manager.export_key() == master_key, "export_key() returns the active MasterKey")
 
         # Visible filename + default .fscrypt extension.
-        _log("1/9 Encrypt/decrypt a UTF-8 text file using the default extension.")
+        _log("1/10 Encrypt/decrypt a UTF-8 text file using the default extension.")
         manager.file.encrypt(text_source)
         text_encrypted = workspace / "readme.fscrypt"
         _assert(text_encrypted.is_file(), "encrypted text file is published at readme.fscrypt")
@@ -119,7 +119,7 @@ def test_real_filesystem_resources() -> None:
         _assert(text_source.read_bytes() == text_payload, "text file round-trip preserves exact bytes")
 
         # Empty file.
-        _log("2/9 Encrypt/decrypt an empty file.")
+        _log("2/10 Encrypt/decrypt an empty file.")
         manager.file.encrypt(empty_source)
         empty_encrypted = workspace / "empty.fscrypt"
         _assert(empty_encrypted.is_file(), "empty file produces an encrypted resource")
@@ -127,7 +127,7 @@ def test_real_filesystem_resources() -> None:
         _assert(empty_source.read_bytes() == b"", "empty file round-trip preserves zero bytes")
 
         # Multi-segment Streaming AEAD file.
-        _log("3/9 Encrypt/decrypt a multi-megabyte binary file.")
+        _log("3/10 Encrypt/decrypt a multi-megabyte binary file.")
         original_large_hash = hashlib.sha256(large_payload).hexdigest()
         manager.file.encrypt(large_source)
         large_encrypted = workspace / "large-payload.fscrypt"
@@ -137,7 +137,7 @@ def test_real_filesystem_resources() -> None:
         _assert(_sha256(large_source) == original_large_hash, "large-file round-trip preserves SHA-256")
 
         # Custom extension.
-        _log("4/9 Use a caller-selected output extension.")
+        _log("4/10 Use a caller-selected output extension.")
         manager.file.encrypt(custom_source, new_extension=".locked")
         custom_encrypted = workspace / "archive.tar.locked"
         _assert(custom_encrypted.is_file(), "custom output extension is applied to the resource name")
@@ -145,7 +145,7 @@ def test_real_filesystem_resources() -> None:
         _assert(custom_source.read_bytes() == custom_payload, "custom-extension round-trip restores original name and bytes")
 
         # Encrypt the entire filename.
-        _log("5/9 Encrypt the filename as well as the file contents.")
+        _log("5/10 Encrypt the filename as well as the file contents.")
         manager.file.encrypt(private_source, encrypt_name=True)
         encrypted_name_candidates = [
             path for path in workspace.iterdir()
@@ -158,7 +158,7 @@ def test_real_filesystem_resources() -> None:
         _assert(private_source.read_bytes() == private_payload, "encrypted-filename round-trip restores original resource")
 
         # Directory names only; descendants are intentionally untouched.
-        _log("6/9 Encrypt/decrypt a directory name without traversing its contents.")
+        _log("6/10 Encrypt/decrypt a directory name without traversing its contents.")
         child_hash_before = _sha256(child_source)
         nested_hash_before = _sha256(nested / "data.bin")
         manager.dir.encrypt(directory_source)
@@ -176,7 +176,7 @@ def test_real_filesystem_resources() -> None:
         _assert(_sha256(child_source) == child_hash_before, "directory decryption does not alter child content")
 
         # Existing destination must never be overwritten.
-        _log("7/9 Verify no-overwrite behavior on destination conflicts.")
+        _log("7/10 Verify no-overwrite behavior on destination conflicts.")
         conflict_source = workspace / "collision.txt"
         conflict_source.write_bytes(b"source must survive")
         conflict_destination = workspace / "collision.fscrypt"
@@ -187,7 +187,7 @@ def test_real_filesystem_resources() -> None:
         _assert(conflict_destination.read_bytes() == b"pre-existing destination", "existing destination is not overwritten")
 
         # Authenticated decryption must not publish plaintext after tampering.
-        _log("8/9 Alter ciphertext and verify authenticated decryption fails safely.")
+        _log("8/10 Alter ciphertext and verify authenticated decryption fails safely.")
         tamper_source = workspace / "tamper-me.bin"
         tamper_payload = b"authenticated payload for tamper detection\n" * 4096
         tamper_source.write_bytes(tamper_payload)
@@ -211,7 +211,7 @@ def test_real_filesystem_resources() -> None:
         )
 
         # Key replacement is validated before becoming active.
-        _log("9/9 Replace the active key and use the new context.")
+        _log("9/10 Replace the active key and use the new context.")
         replacement_key = fscryptography.generate()
         manager.change_key(replacement_key)
         _assert(manager.export_key() == replacement_key, "change_key() activates the replacement MasterKey")
@@ -235,7 +235,29 @@ def test_real_filesystem_resources() -> None:
                 f"classification={record.classification}"
             )
 
-    _log("Manager context has been closed.")
+
+    # Password-protected MasterKey uses the same high-level filesystem API.
+    _log("10/10 Open a password-protected MasterKey and perform a real round-trip.")
+    password = "integration test passphrase"
+    protected_key = fscryptography.generate(password=password)
+    protected_source = workspace / "protected-master-key.txt"
+    protected_payload = b"resource encrypted with a password-protected MasterKey"
+    protected_source.write_bytes(protected_payload)
+    with fscryptography.Manager(key=protected_key, password=password) as protected_manager:
+        _assert(
+            protected_manager.export_key() == protected_key,
+            "password-protected MasterKey opens and exports canonically",
+        )
+        protected_manager.file.encrypt(protected_source)
+        protected_encrypted = workspace / "protected-master-key.fscrypt"
+        _assert(protected_encrypted.is_file(), "protected-key manager encrypts a real file")
+        protected_manager.file.decrypt(protected_encrypted)
+        _assert(
+            protected_source.read_bytes() == protected_payload,
+            "password-protected MasterKey completes a filesystem round-trip",
+        )
+
+    _log("Manager contexts have been closed.")
     _log(f"All generated resources remain available at: {workspace}")
     _log("RESULT: all real-filesystem integration assertions passed.")
     _log("=" * 72)
