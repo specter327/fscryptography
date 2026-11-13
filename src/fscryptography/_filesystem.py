@@ -221,6 +221,29 @@ def _sync_close(stream: BinaryIO) -> None:
     stream.close()
 
 
+def _sync_parent_directory(parent: Path) -> None:
+    """Persist namespace changes where directory fsync is supported.
+
+    Windows currently relies on the platform's rename semantics and does not
+    claim crash-durable directory-entry updates through this helper.
+    """
+    if os.name == "nt":
+        return
+    if not sys.platform.startswith("linux"):
+        raise AtomicOperationError("directory synchronization is unsupported on this platform")
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    try:
+        descriptor = os.open(parent, flags)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    except OSError as exc:
+        raise AtomicOperationError(
+            "filesystem namespace update could not be synchronized"
+        ) from exc
+
+
 class _FileOperations:
     def __init__(self, manager) -> None:
         self._manager = manager
@@ -285,6 +308,8 @@ class _FileOperations:
                 _sync_close(output)
             _publish_noreplace(temporary, destination)
             published = True
+            # Persist the destination entry before removing the only source copy.
+            _sync_parent_directory(source_path.parent)
             try:
                 latest = source_path.lstat()
                 if (latest.st_dev, latest.st_ino) != (source_info.st_dev, source_info.st_ino):
@@ -294,6 +319,12 @@ class _FileOperations:
                 if isinstance(exc, AtomicOperationError):
                     raise
                 raise AtomicOperationError("encrypted output was published but source removal failed") from exc
+            try:
+                _sync_parent_directory(source_path.parent)
+            except AtomicOperationError as exc:
+                raise AtomicOperationError(
+                    "source was removed, but the namespace update could not be synchronized"
+                ) from exc
         finally:
             if not output.closed:
                 output.close()
@@ -345,6 +376,8 @@ class _FileOperations:
                 _sync_close(output)
             _publish_noreplace(temporary, destination)
             published = True
+            # Persist the plaintext entry before removing the authenticated ciphertext.
+            _sync_parent_directory(source_path.parent)
             try:
                 latest = source_path.lstat()
                 if (latest.st_dev, latest.st_ino) != (source_info.st_dev, source_info.st_ino):
@@ -354,6 +387,12 @@ class _FileOperations:
                 if isinstance(exc, AtomicOperationError):
                     raise
                 raise AtomicOperationError("plaintext was published but ciphertext removal failed") from exc
+            try:
+                _sync_parent_directory(source_path.parent)
+            except AtomicOperationError as exc:
+                raise AtomicOperationError(
+                    "ciphertext was removed, but the namespace update could not be synchronized"
+                ) from exc
         finally:
             if not output.closed:
                 output.close()
@@ -380,6 +419,7 @@ class _DirectoryOperations:
         )
         _validate_component(destination_name, source.parent)
         _publish_noreplace(source, source.with_name(destination_name))
+        _sync_parent_directory(source.parent)
 
     def decrypt(self, path: str | os.PathLike[str]) -> None:
         self._manager._require_open()
@@ -393,6 +433,7 @@ class _DirectoryOperations:
         )
         _validate_component(destination_name, source.parent)
         _publish_noreplace(source, source.with_name(destination_name))
+        _sync_parent_directory(source.parent)
 
 
 def encrypt_name_fn(name: str, primitive, profile: NameProfile, limit: int) -> str:
