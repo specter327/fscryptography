@@ -41,8 +41,8 @@ No se permiten longitudes cero, bytes sobrantes ni campos adicionales en el esqu
 
 Límites estructurales propuestos para v1:
 - Cada keyset serializado: máximo 32 KiB.
-- Payload lógico: máximo 64 KiB.
-- Longitud del payload exterior: máximo 64 KiB en modo aleatorio y 64 KiB + 16 bytes en modo protegido (tag GCM incluido).
+- Payload lógico: máximo 128 KiB.
+- Longitud del payload exterior: máximo 128 KiB en modo aleatorio y 128 KiB + 16 bytes en modo protegido (tag GCM incluido).
 - Los límites se comprueban antes de reservar memoria o invocar el parser Protobuf.
 
 El perfil concreto del keyset AEAD de nombres y su compatibilidad multiplataforma siguen pendientes de validación. La estructura del payload no implica que ese backend ya esté seleccionado.
@@ -107,7 +107,7 @@ El parser debe operar en este orden, sin ejecutar KDF ni deserializar keysets an
 1. Verificar tamaño mínimo, magic y versión soportada.
 2. Verificar modo, schema y flags.
 3. Verificar que `header_length` coincide exactamente con el modo y versión.
-4. Verificar que `payload_length` no supera 64 KiB en modo aleatorio ni 64 KiB + 16 bytes en modo protegido, y que el tamaño total coincide exactamente con la entrada.
+4. Verificar que `payload_length` no supera 128 KiB en modo aleatorio ni 128 KiB + 16 bytes en modo protegido, y que el tamaño total coincide exactamente con la entrada.
 5. En modo protegido, validar identificadores, versión Argon2, tamaños fijos y límites de parámetros antes de ejecutar Argon2id.
 6. En modo protegido, autenticar y descifrar el payload completo; no entregar bytes parciales.
 7. Validar el framing interno, las longitudes y la ausencia de bytes sobrantes.
