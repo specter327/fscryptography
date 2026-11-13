@@ -86,10 +86,9 @@ No se siguen enlaces simbólicos y solo se aceptan archivos regulares/directorio
 
 Las pruebas `test_windows_source_substitution_during_quarantine_is_never_deleted` y `test_windows_replacement_after_handle_open_is_not_deleted` fuerzan, respectivamente, una sustitución antes del movimiento a cuarentena y otra después de abrir/verificar el handle. Comprueban que el objeto sustituto no se elimina y que la disposición de borrado sigue ligada al handle del objeto esperado. Las pruebas de round-trip de Windows ejercitan la eliminación normal por handle. La durabilidad de las entradas de directorio en Windows sigue sin estar garantizada por `fsync` de directorio.
 
-
 ## Terminación abrupta del proceso
 
-La prueba de integración `tests/integration/test_crash_recovery.py` ejecuta la operación en un proceso hijo y fuerza `os._exit` desde la persistencia del journal. Esto evita que se ejecuten bloques `finally`, destructores o limpieza normal. Para cada estado `prepared`, `result_ready`, `published`, `source_retained`, `source_removed` y `complete`, se interrumpe tanto antes como después de escribir el nuevo registro.
+La prueba de integración `tests/real_resources/test_crash_recovery.py` ejecuta la operación en un proceso hijo y fuerza `os._exit` desde la persistencia del journal. Esto evita que se ejecuten bloques `finally`, destructores o limpieza normal. Para cada estado `prepared`, `result_ready`, `published`, `source_retained`, `source_removed` y `complete`, se interrumpe tanto antes como después de escribir el nuevo registro.
 
 La prueba comprueba el estado visible del origen y destino, la clasificación que devuelve `inspect_recovery()`, la repetibilidad de la inspección y que el journal y el directorio transaccional no sean modificados por ella. En particular, contempla la diferencia entre el estado físico y el último estado durable del journal: por ejemplo, el destino puede estar publicado mientras el registro aún dice `result_ready`, o el origen puede haberse retirado mientras el registro todavía dice `source_retained`.
 
