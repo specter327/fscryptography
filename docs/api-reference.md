@@ -98,7 +98,6 @@ Implementado:
 
 Pendiente:
 - Validación específica en Windows 11 cliente y ampliación de escenarios de interrupción abrupta en Windows.
-- Política segura de retención/limpieza de journals completados.
 - API separada de resolución explícita; no forma parte de esta versión.
 - Fuzzing/property-based de parsers y revisión de seguridad independiente.
 
