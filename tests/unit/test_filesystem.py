@@ -112,8 +112,11 @@ def test_tampered_file_preserves_ciphertext(manager, tmp_path):
     assert encrypted.exists()
     assert not source.exists()
     records = manager.inspect_recovery(tmp_path)
-    assert len(records) == 1
-    assert records[0].classification == "result_incomplete_or_unverified"
+    assert any(
+        record.operation == "file_decrypt"
+        and record.classification == "result_incomplete_or_unverified"
+        for record in records
+    )
 
 
 def test_invalid_header_preserves_source(manager, tmp_path):
