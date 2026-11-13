@@ -291,6 +291,75 @@ class Transaction:
             raise RuntimeError("transaction is not complete")
 
 
+def _inspect_path_based(parent: str | os.PathLike[str]) -> tuple[RecoveryRecord, ...]:
+    """Windows fallback; path-based inspection has weaker race guarantees."""
+    root = Path(os.path.abspath(os.fspath(parent)))
+    root_info = root.lstat()
+    if stat.S_ISLNK(root_info.st_mode) or not stat.S_ISDIR(root_info.st_mode):
+        raise NotADirectoryError("recovery inspection requires a real directory")
+    records: list[RecoveryRecord] = []
+    for entry in sorted(root.iterdir(), key=lambda item: item.name):
+        if not entry.name.startswith(_PREFIX):
+            continue
+        transaction_id = entry.name[len(_PREFIX):]
+        if not _ID.fullmatch(transaction_id):
+            records.append(RecoveryRecord(transaction_id, None, None, "corrupt", detail="invalid transaction directory name"))
+            continue
+        try:
+            entry_info = entry.lstat()
+            if not stat.S_ISDIR(entry_info.st_mode) or stat.S_ISLNK(entry_info.st_mode):
+                raise ValueError("transaction entry is not a real directory")
+            journal = entry / "journal.json"
+            journal_info = journal.lstat()
+            if not stat.S_ISREG(journal_info.st_mode) or stat.S_ISLNK(journal_info.st_mode) or journal_info.st_size > _MAX_RECORD:
+                raise ValueError("journal is not a bounded regular file")
+            fd = os.open(journal, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            opened_info = os.fstat(fd)
+            if not stat.S_ISREG(opened_info.st_mode) or _identity(opened_info) != _identity(journal_info):
+                os.close(fd)
+                raise ValueError("journal changed during inspection")
+            with os.fdopen(fd, "rb") as stream:
+                raw = stream.read(_MAX_RECORD + 1)
+            data = _decode(raw, transaction_id, root_info)
+            if data["parent_identity"] != _identity(root_info):
+                records.append(RecoveryRecord(transaction_id, data["operation"], data["state"], "ambiguous",
+                    data["source_name"], data["destination_name"], data["temporary_name"], "parent directory identity mismatch"))
+                continue
+            source_kind, source_id = _lstat_identity(root / data["source_name"])
+            dest_kind, dest_id = _lstat_identity(root / data["destination_name"])
+            temp_kind, temp_id = ("missing", None)
+            if data["temporary_name"] is not None:
+                temp_kind, temp_id = _lstat_identity(entry / "result")
+            retained_kind, retained_id = ("missing", None)
+            if data["operation"].startswith("file_"):
+                retained_kind, retained_id = _lstat_identity(entry / "source")
+            expected_source, expected_result = data["source_identity"], data["result_identity"]
+            classification = "ambiguous"
+            if any(kind in {"symlink", "other"} for kind in (source_kind, dest_kind, temp_kind, retained_kind)):
+                classification = "ambiguous"
+            elif data["operation"].startswith("dir_"):
+                if source_kind == "directory" and source_id == expected_source and dest_kind == "missing":
+                    classification = "prepared_no_output" if data["state"] == "prepared" else "ambiguous"
+                elif source_kind == "missing" and dest_kind == "directory" and dest_id == expected_source:
+                    classification = "source_removed" if data["state"] in {"source_removed", "complete"} else "published_source_missing"
+            elif retained_kind != "missing":
+                if retained_kind == "regular" and retained_id == expected_source and source_kind == "missing" and dest_kind == "regular" and expected_result is not None and dest_id == expected_result:
+                    classification = "source_retained"
+            elif source_kind == "regular" and source_id == expected_source and dest_kind == "missing" and temp_kind == "missing":
+                classification = "prepared_no_output" if data["state"] == "prepared" else "ambiguous"
+            elif source_kind == "regular" and source_id == expected_source and dest_kind == "missing" and temp_kind == "regular":
+                classification = "result_ready" if expected_result is not None and temp_id == expected_result else "result_incomplete_or_unverified"
+            elif dest_kind == "regular" and expected_result is not None and dest_id == expected_result and source_kind == "regular" and source_id == expected_source:
+                classification = "published_source_present"
+            elif dest_kind == "regular" and expected_result is not None and dest_id == expected_result and source_kind == "missing":
+                classification = "source_removed" if data["state"] in {"source_removed", "complete"} else "published_source_missing"
+            records.append(RecoveryRecord(transaction_id, data["operation"], data["state"], classification,
+                data["source_name"], data["destination_name"], data["temporary_name"]))
+        except Exception as exc:
+            records.append(RecoveryRecord(transaction_id, None, None, "corrupt", detail=str(exc)))
+    return tuple(records)
+
+
 def _lstat_identity(path: Path):
     try:
         info = path.lstat()
@@ -302,7 +371,9 @@ def _lstat_identity(path: Path):
 
 
 def inspect(parent: str | os.PathLike[str]) -> tuple[RecoveryRecord, ...]:
-    """Inspect journals using directory descriptors; never follow transaction symlinks."""
+    """Inspect journals without modifying entries; Linux uses descriptor-relative traversal."""
+    if not sys.platform.startswith("linux"):
+        return _inspect_path_based(parent)
     root = Path(os.path.abspath(os.fspath(parent)))
     flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
     root_fd = os.open(root, flags)
