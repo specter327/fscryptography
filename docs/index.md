@@ -6,6 +6,7 @@ Referencia técnica de la librería. El README es una presentación breve; las d
 - [Alcance](scope.md)
 - [Arquitectura](architecture.md)
 - [Diseño criptográfico](cryptographic-design.md)
+- [Validación del backend criptográfico](backend-validation.md)
 - [Gestión de claves](key-management.md)
 - [Formato de MasterKey](master-key-format.md)
 - [Cifrado de nombres](filename-encryption.md)
