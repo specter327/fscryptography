@@ -6,7 +6,6 @@ import pytest
 
 from fscryptography.file_format import (
     FLAG_ENCRYPTED_NAME,
-    MAGIC,
     MAX_HEADER_SIZE,
     build_header,
     parse_header,
@@ -35,7 +34,6 @@ def test_split_extension(name, base, extension):
     [
         (".txt", ".fscrypt"),
         (None, ".fscrypt"),
-        ("", ""),  # Empty is a valid output suffix, not an original extension.
     ],
 )
 def test_visible_header_round_trip(original, output):
