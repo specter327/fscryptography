@@ -47,7 +47,7 @@ Límites estructurales propuestos para v1:
 
 El keyset de nombres utiliza la primitiva Tink `Aead` con la plantilla `AES256_GCM`, validada mediante prueba ejecutable en Tink 1.16.1 con Python 3.10–3.13. La representación textual aprobada es `~1` seguido de ciphertext Tink en Base64URL sin padding; para componentes de 255 bytes, el máximo derivado de plaintext UTF-8 es 156 bytes. La validación sobre filesystems objetivo sigue pendiente; véase [Cifrado de nombres](filename-encryption.md).
 
-## Propuesta de formato binario v1
+## Formato binario v1 aprobado
 
 Todos los enteros multibyte usan big-endian. No hay padding implícito entre campos. La cabecera completa se utiliza como AAD en el modo protegido.
 
@@ -147,7 +147,8 @@ Cualquier fallo invalida el contenedor completo. Nunca se devuelve un keyset par
 - Modo, schema, identificador KDF/AEAD o flags desconocidos.
 - Longitudes incoherentes, fuera de límites o que no coincidan con el tamaño real.
 - Cabecera de tamaño inesperado, extensiones o bytes finales no definidos.
-- Base64 no canónico, whitespace, padding incorrecto o tamaño excedido.\n- Contraseña vacía, UTF-8 inválido o superior a 1.024 bytes.\n- Parámetros Argon2id fuera del perfil permitido, antes de ejecutar la KDF.
+- Base64 no canónico, whitespace, padding incorrecto o tamaño excedido.\n- Contraseña vacía, UTF-8 inválido o superior a 1.024 bytes.
+- Parámetros Argon2id fuera del perfil permitido, antes de ejecutar la KDF.
 - Contraseña incorrecta, nonce/AAD/ciphertext/tag alterados.
 - Payload interno truncado, longitudes cero, longitudes fuera de límites o bytes sobrantes.
 - Protobuf malformado, keysets vacíos o keysets de tipo inesperado.
@@ -162,7 +163,7 @@ Base64 no es cifrado. El modo aleatorio debe protegerse como una credencial secr
 
 ## Compatibilidad y evolución
 
-- La versión inicial propuesta es `1.0`.
+- La versión inicial aprobada es `1.0`.
 - Una versión major desconocida se rechaza.
 - Una versión minor desconocida también se rechaza en v1; no se ignoran extensiones no definidas.
 - Los identificadores de algoritmos y esquemas son explícitos; nunca se seleccionan algoritmos mediante heurísticas.
