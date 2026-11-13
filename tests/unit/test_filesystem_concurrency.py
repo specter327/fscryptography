@@ -90,3 +90,62 @@ def test_competing_encryption_of_same_source_never_publishes_multiple_results(
     before = manager.inspect_recovery(tmp_path)
     after = manager.inspect_recovery(tmp_path)
     assert before == after
+
+ 
+def test_encrypt_rejects_in_place_source_mutation_during_streaming(
+    manager, tmp_path, monkeypatch
+):
+    """A same-inode write during streaming must not produce a published result."""
+    source = tmp_path / "mutated.bin"
+    original_payload = b"A" * (2 * 1024 * 1024)
+    source.write_bytes(original_payload)
+    copy_encrypt = fscryptography._filesystem._copy_encrypt
+
+    def mutate_after_copy(primitive, src, dst, aad):
+        copy_encrypt(primitive, src, dst, aad)
+        with source.open("r+b") as writer:
+            writer.seek(0)
+            writer.write(b"B")
+
+    monkeypatch.setattr(fscryptography._filesystem, "_copy_encrypt", mutate_after_copy)
+
+    with pytest.raises(
+        fscryptography.AtomicOperationError, match="changed during the operation"
+    ):
+        manager.file.encrypt(source)
+
+    assert source.is_file()
+    assert source.read_bytes() != original_payload
+    assert not (tmp_path / "mutated.fscrypt").exists()
+
+
+def test_decrypt_rejects_in_place_ciphertext_mutation_during_streaming(
+    manager, tmp_path, monkeypatch
+):
+    """Authenticated output is not published if its ciphertext source changes."""
+    source = tmp_path / "ciphertext.bin"
+    source.write_bytes(b"authenticated payload" * 100_000)
+    manager.file.encrypt(source)
+    encrypted = tmp_path / "ciphertext.fscrypt"
+    original_ciphertext = encrypted.read_bytes()
+    copy_decrypt = fscryptography._filesystem._copy_decrypt
+
+    def mutate_after_copy(primitive, src, dst, aad):
+        copy_decrypt(primitive, src, dst, aad)
+        with encrypted.open("r+b") as writer:
+            writer.seek(-1, os.SEEK_END)
+            last = writer.read(1)
+            writer.seek(-1, os.SEEK_END)
+            writer.write(bytes([last[0] ^ 1]))
+
+    monkeypatch.setattr(fscryptography._filesystem, "_copy_decrypt", mutate_after_copy)
+
+    with pytest.raises(
+        fscryptography.AtomicOperationError, match="changed during the operation"
+    ):
+        manager.file.decrypt(encrypted)
+
+    assert encrypted.is_file()
+    assert encrypted.read_bytes() != original_ciphertext
+    assert not source.exists()
+    assert not (tmp_path / "ciphertext.bin").exists()
