@@ -345,6 +345,27 @@ def _sync_parent_directory(parent: Path) -> None:
 
 
 
+
+def _windows_mark_handle_for_deletion(handle: int) -> None:
+    """Request deletion of the object referenced by an already verified handle."""
+    import ctypes
+    from ctypes import wintypes
+
+    class FILE_DISPOSITION_INFO(ctypes.Structure):
+        _fields_ = [("DeleteFile", wintypes.BOOLEAN)]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.SetFileInformationByHandle.argtypes = (
+        wintypes.HANDLE, wintypes.INT, wintypes.LPVOID, wintypes.DWORD,
+    )
+    kernel32.SetFileInformationByHandle.restype = wintypes.BOOL
+    disposition = FILE_DISPOSITION_INFO(True)
+    if not kernel32.SetFileInformationByHandle(
+        handle, 4, ctypes.byref(disposition), ctypes.sizeof(disposition)
+    ):
+        raise ctypes.WinError(ctypes.get_last_error())
+
+
 def _windows_delete_file_by_identity(path: Path, expected: os.stat_result) -> None:
     """Delete the exact verified Windows file object through its open handle.
 
@@ -426,12 +447,8 @@ def _windows_delete_file_by_identity(path: Path, expected: os.stat_result) -> No
                 "quarantined source identity changed; no file was deleted"
             )
 
-        disposition = FILE_DISPOSITION_INFO(True)
         native_handle = msvcrt.get_osfhandle(descriptor)
-        if not kernel32.SetFileInformationByHandle(
-            native_handle, 4, ctypes.byref(disposition), ctypes.sizeof(disposition)
-        ):
-            raise ctypes.WinError(ctypes.get_last_error())
+        _windows_mark_handle_for_deletion(native_handle)
     finally:
         if descriptor is not None:
             os.close(descriptor)
