@@ -314,7 +314,13 @@ def _rename_directory_checked_path(
     substitutes the source between inspection and rename, restore the moved
     entry without overwriting a newly-created source path.
     """
-    os.rename(source, destination)
+    try:
+        os.rename(source, destination)
+    except FileExistsError as exc:
+        raise DestinationConflictError("destination already exists") from exc
+    except OSError as exc:
+        raise AtomicOperationError("Windows directory rename failed") from exc
+
     try:
         moved = destination.lstat()
         if (
