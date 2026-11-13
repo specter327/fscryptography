@@ -112,6 +112,20 @@ Ni el path absoluto, ni el nombre del padre, ni el nombre actual del archivo se 
 - El formato no ofrece autenticación de identidad del emisor ni protección contra replay de versiones anteriores válidas.
 - La seguridad de los keysets depende de la protección del contenedor MasterKey.
 
+## Dependencia pendiente: extensión de salida y reconstrucción del nombre
+
+El diseño actual conserva la extensión original, pero no registra la extensión que se utilizó para renombrar el archivo cifrado. Esto impide reconstruir de forma general el nombre base durante el descifrado si `new_extension` puede variar por operación.
+
+Ejemplo: si `report.txt` se cifra como `report.locked`, el metadato `.txt` permite recuperar la extensión original, pero no permite deducir de forma inequívoca qué parte del nombre visible debe retirarse para obtener `report`. No se debe asumir que el sufijo cifrado es siempre `.encrypted` ni inferirlo a partir del nombre.
+
+Por tanto, el contrato reversible debe escoger explícitamente una de estas estrategias antes de aprobar el formato:
+
+1. **Sufijo cifrado fijo:** la librería utiliza un único sufijo de salida normativo; el descifrador puede retirarlo sin configuración adicional. En ese caso, `new_extension` no puede ser arbitrario.
+2. **Sufijo cifrado suministrado al descifrar:** `decrypt()` recibe el mismo sufijo aplicado durante el cifrado. La aplicación debe conservar y proporcionar ese dato.
+3. **Metadatos autocontenidos:** la cabecera almacena tanto la extensión original como la extensión de salida aplicada. Esto requiere definir un esquema de metadatos versionado con longitudes explícitas y ajustar el límite de cabecera.
+
+La tercera estrategia mantiene la recuperación autocontenida y permite extensiones de salida variables, pero modifica el layout propuesto. No se debe implementar el parser ni las operaciones de archivo hasta seleccionar una estrategia y fijar el contrato exacto de ambos sufijos.
+
 ## Decisiones pendientes antes de declarar el formato cerrado
 
 1. **Semántica exacta de extensión:** definir cómo se identifica la extensión original, especialmente nombres sin punto, nombres con varios puntos y dotfiles como `.profile`.
@@ -128,8 +142,10 @@ Hasta resolver estos puntos, el layout de cabecera y el uso de Streaming AEAD qu
 - [x] Definir una envoltura mínima, con cabecera autenticada como AAD.
 - [x] Definir que el flujo ciphertext Tink sigue directamente a la cabecera.
 - [x] Definir que el descifrado debe validar el final completo del flujo antes de publicar plaintext.
-- [ ] Aprobar la semántica de extensión y el contrato exacto de `new_extension`.
-- [ ] Aprobar el layout propuesto como formato binario de archivo v1.0.
+- [ ] Seleccionar cómo se identifica y elimina la extensión de salida durante el descifrado.
+- [ ] Aprobar la semántica de extensión original (dotfiles, múltiples puntos y nombres sin extensión) y el contrato exacto de `new_extension`.
+- [ ] Actualizar el esquema de metadatos si se elige almacenar la extensión de salida.
+- [ ] Aprobar el layout resultante como formato binario de archivo v1.0.
 - [ ] Crear vectores golden y pruebas negativas del parser de cabecera.
 - [ ] Validar round-trip de archivos vacíos, pequeños, multi-segmento y grandes.
 - [ ] Verificar truncamiento, alteración, reordenamiento, AAD incorrecto y cierre incompleto.
