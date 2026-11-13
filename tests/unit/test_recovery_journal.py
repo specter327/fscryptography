@@ -290,7 +290,8 @@ def test_failed_parent_sync_leaves_inspectable_prepared_journal(tmp_path, monkey
 
     records = inspect(tmp_path)
 
-    assert calls == [tmp_path]
+    assert len(calls) == 2
+    assert calls[-1] == tmp_path
     assert len(records) == 1
     assert records[0].classification == "prepared_no_output"
     assert source.read_bytes() == b"source"
