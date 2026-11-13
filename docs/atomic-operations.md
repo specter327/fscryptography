@@ -4,7 +4,7 @@
 
 Un fallo no debe destruir el original ni publicar contenido parcial como resultado válido. Las operaciones de archivo utilizan un temporal exclusivo en el mismo directorio, completan la transformación antes de publicar y nunca reemplazan un destino existente.
 
-## Secuencia de archivo
+## Secuencia de archivo actualmente implementada
 
 Tanto cifrado como descifrado siguen esta secuencia:
 
@@ -33,11 +33,17 @@ El renombrado de directorios también usa publicación no-replace y sincroniza e
 
 La matriz real NTFS/ext4 y las garantías ante cortes eléctricos todavía requieren validación empírica en los sistemas objetivo.
 
-## Recuperación y estados tras interrupción
+## Journal persistente: siguiente protocolo
 
-No existe todavía un journal persistente ni una API de recuperación automática. No se deben borrar temporales huérfanos automáticamente: sin un registro transaccional no es posible demostrar que un temporal no pertenece a una operación activa o que su eliminación sea segura.
+El protocolo de journal persistente está especificado en [Journal persistente y protocolo de recuperación](recovery-journal.md), pero **todavía no está implementado**.
 
-Los estados posibles tras una interrupción son:
+El diseño establece un directorio transaccional por operación, un registro JSON estricto, identidades de filesystem para padre/origen/resultado y barreras de persistencia antes de cada mutación destructiva. El temporal de resultado residirá dentro del directorio transaccional. Los registros almacenarán únicamente basenames validados, nunca rutas absolutas.
+
+La primera capacidad de recuperación será de inspección explícita y solo lectura. No se añadirá recuperación automática al constructor de `Manager`, ni se eliminarán temporales, resultados, orígenes o journals automáticamente. Una futura resolución de transacciones será una operación separada y deberá preservar todo ante cualquier ambigüedad.
+
+## Estados tras interrupción sin journal
+
+Hasta que el protocolo esté implementado, los estados posibles siguen siendo:
 
 | Punto de interrupción | Estado esperado |
 |---|---|
@@ -56,8 +62,8 @@ Si origen y destino coexisten, no se debe eliminar ninguno sin verificar su cont
 - [x] Identidad del origen revalidada antes de retirarlo.
 - [x] `fsync` del archivo temporal antes de publicar.
 - [x] `fsync` del directorio padre en GNU/Linux después de publicar y retirar.
-- [x] Si falla la sincronización posterior a la publicación, el origen se conserva.
-- [ ] Journal persistente y recuperación transaccional tras interrupción abrupta.
+- [ ] Journal persistente y recuperación de inspección explícita.
+- [ ] Resolución segura de transacciones interrumpidas.
 - [ ] Flush verificable de directorio y garantías de durabilidad en Windows.
 - [ ] Validación empírica en NTFS y ext4, incluidas colisiones case-insensitive/case-sensitive.
 - [ ] Pruebas de concurrencia y cambios hostiles de rutas durante la operación.
