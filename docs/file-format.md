@@ -14,8 +14,6 @@ El formato no oculta el tamaño aproximado del contenido, el número de segmento
 
 ## Formato binario v1.0
 
-<badge>Contrato v1.0</badge>
-
 Todos los enteros multibyte son unsigned big-endian. No existe padding.
 
 ### Cabecera fija (16 bytes)
@@ -96,7 +94,7 @@ En cifrado con nombre visible, el parámetro es `str | None`:
 - `""`: no añadir extensión de salida.
 - Una cadena no vacía debe comenzar por exactamente un punto y contener al menos un carácter adicional, por ejemplo `.enc` o `.vault`.
 - No se añade ni elimina el punto automáticamente.
-- Se rechazan separadores, NUL, caracteres de control, caracteres prohibidos por el perfil Windows y entradas que no sean un sufijo válido.
+- El parser del formato rechaza separadores `/`, NUL y sufijos estructuralmente inválidos. Las restricciones adicionales (por ejemplo, caracteres prohibidos en Windows) se aplican al validar el nombre completo contra el perfil del filesystem de destino.
 - Se valida el nombre completo resultante contra el límite real del componente de destino.
 
 Cuando se cifra el nombre, la extensión completa forma parte del nombre cifrado. En ese modo, `new_extension` debe ser `None`; no se añade `.fscrypt`.
