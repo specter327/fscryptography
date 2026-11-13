@@ -503,9 +503,11 @@ def _retire_source(
 
         try:
             moved = retained.lstat()
-            if not stat.S_ISREG(moved.st_mode) or (
-                moved.st_dev, moved.st_ino
-            ) != (expected.st_dev, expected.st_ino):
+            if (
+                not stat.S_ISREG(moved.st_mode)
+                or moved.st_nlink != 1
+                or (moved.st_dev, moved.st_ino) != (expected.st_dev, expected.st_ino)
+            ):
                 try:
                     os.rename(retained, source_path)  # Fails rather than replacing a new source entry.
                 except Exception as restore_error:
@@ -541,6 +543,7 @@ def _retire_source(
         current = os.stat("source", dir_fd=transaction.directory_fd, follow_symlinks=False)
         if (
             not stat.S_ISREG(current.st_mode)
+            or current.st_nlink != 1
             or (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino)
         ):
             try:
