@@ -79,3 +79,42 @@ def test_password_limits_are_enforced():
         generate_master_key(password="")
     with pytest.raises(ValueError):
         generate_master_key(password="é" * 513)
+
+
+def test_unsupported_protected_profiles_are_rejected_before_argon2id(monkeypatch):
+    import fscryptography._master_key as master_key_module
+
+    encoded = generate_master_key(password="profile validation")
+    binary = bytearray(base64.b64decode(encoded))
+    invalid_fields = (
+        (20, b"\\x02"),                 # KDF identifier
+        (21, b"\\x12"),                 # Argon2 version
+        (22, b"\\x00\\x00\\x20\\x00"),   # memory cost
+        (26, b"\\x00\\x00\\x00\\x02"),   # time cost
+        (30, b"\\x00\\x02"),           # parallelism
+        (48, b"\\x02"),                 # wrapping AEAD identifier
+    )
+
+    def forbidden_kdf(*args, **kwargs):
+        pytest.fail("Argon2id must not run for an unsupported profile")
+
+    monkeypatch.setattr(master_key_module, "_derive_wrapping_key", forbidden_kdf)
+    for offset, replacement in invalid_fields:
+        altered = bytearray(binary)
+        altered[offset:offset + len(replacement)] = replacement
+        candidate = base64.b64encode(altered).decode("ascii")
+        with pytest.raises(FormatError):
+            open_master_key(candidate, password="profile validation")
+
+
+def test_oversized_password_is_rejected_before_argon2id(monkeypatch):
+    import fscryptography._master_key as master_key_module
+
+    encoded = generate_master_key(password="valid password")
+
+    def forbidden_kdf(*args, **kwargs):
+        pytest.fail("Argon2id must not run for an oversized password")
+
+    monkeypatch.setattr(master_key_module, "_derive_wrapping_key", forbidden_kdf)
+    with pytest.raises(ValueError, match="1 to 1024"):
+        open_master_key(encoded, password="x" * 1025)
