@@ -1,3 +1,4 @@
+from .crypto import Crypto
 """Filesystem-oriented cryptographic operations."""
 
 from .errors import (
@@ -17,6 +18,7 @@ from .errors import (
 )
 
 __all__ = [
+    "Crypto",
     "AtomicOperationError",
     "AuthenticationError",
     "BackendError",
