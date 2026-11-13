@@ -15,6 +15,7 @@ Referencia técnica de la librería. El README es una presentación breve; las d
 - [Cifrado de nombres](filename-encryption.md)
 - [Formato de archivos](file-format.md)
 - [Operaciones atómicas](atomic-operations.md)
+- [Journal persistente y protocolo de recuperación](recovery-journal.md)
 - [API pública](api-reference.md)
 - [Errores y excepciones — contrato v1](errors.md)
 - [Modelo de seguridad](security-model.md)
