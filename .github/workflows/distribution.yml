@@ -12,6 +12,7 @@ on:
       - "src/**"
       - "docs/**"
       - "tests/**"
+      - "scripts/**"
   pull_request:
     paths:
       - ".github/workflows/distribution.yml"
@@ -22,6 +23,7 @@ on:
       - "src/**"
       - "docs/**"
       - "tests/**"
+      - "scripts/**"
   workflow_dispatch:
 
 permissions:
@@ -71,6 +73,11 @@ jobs:
               assert callable(manager.dir.decrypt)
           print("Installed wheel smoke test passed.")
           PY
+
+      - name: Validate maintenance scripts
+        run: |
+          python -m compileall -q scripts
+          python scripts/update/github.py --help
 
       - name: Run unit and format tests
         working-directory: ${{ github.workspace }}
