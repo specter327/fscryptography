@@ -158,6 +158,7 @@ def _restore_key_material(content_keyset: bytes, names_keyset: bytes) -> _KeyMat
 
 def generate_master_key(*, password: str | None = None) -> str:
     """Generate an opaque Base64 MasterKey v1.0 container."""
+    password_raw = None if password is None else _password_bytes(password)
     content_keyset, names_keyset = _new_keysets()
     logical_payload = _frame_payload(content_keyset, names_keyset)
 
@@ -169,7 +170,6 @@ def generate_master_key(*, password: str | None = None) -> str:
         )
         binary = header + logical_payload
     else:
-        password_raw = _password_bytes(password)
         salt = os.urandom(_SALT_LENGTH)
         nonce = os.urandom(_NONCE_LENGTH)
         header = (
