@@ -98,7 +98,7 @@ El payload es el resultado de AES-256-GCM aplicado al payload lógico:
 - El resultado de AES-GCM incluye el tag de autenticación de 16 bytes.
 - `payload_length` incluye ciphertext y tag.
 
-La contraseña no se almacena. La API recibe texto y su codificación binaria propuesta es UTF-8 estricto, sin normalización Unicode implícita. El límite máximo de bytes de contraseña y los límites de aceptación de parámetros Argon2id deben fijarse antes de implementar; el parser debe rechazarlos antes de ejecutar la KDF si exceden la política.
+La contraseña no se almacena. La API recibe texto y su codificación binaria propuesta es UTF-8 estricto, sin normalización Unicode implícita. La política propuesta de Argon2id, el límite de contraseña y los límites de entrada están especificados en [Política de Argon2id y límites de apertura](argon2id-policy.md). El parser debe validar el perfil admitido y todos los límites antes de ejecutar la KDF.
 
 ## Reglas de parsing
 
@@ -108,7 +108,7 @@ El parser debe operar en este orden, sin ejecutar KDF ni deserializar keysets an
 2. Verificar modo, schema y flags.
 3. Verificar que `header_length` coincide exactamente con el modo y versión.
 4. Verificar que `payload_length` no supera 128 KiB en modo aleatorio ni 128 KiB + 16 bytes en modo protegido, y que el tamaño total coincide exactamente con la entrada.
-5. En modo protegido, validar identificadores, versión Argon2, tamaños fijos y límites de parámetros antes de ejecutar Argon2id.
+5. En modo protegido, validar identificadores, versión Argon2, tamaños fijos, límites de entrada y el perfil Argon2id permitido según [la política de Argon2id](argon2id-policy.md), antes de ejecutar la KDF.
 6. En modo protegido, autenticar y descifrar el payload completo; no entregar bytes parciales.
 7. Validar el framing interno, las longitudes y la ausencia de bytes sobrantes.
 8. Parsear los dos keysets con Tink y verificar que corresponden a las primitivas esperadas.
@@ -122,7 +122,7 @@ Cualquier fallo invalida el contenedor completo. Nunca se devuelve un keyset par
 - Modo, schema, identificador KDF/AEAD o flags desconocidos.
 - Longitudes incoherentes, fuera de límites o que no coincidan con el tamaño real.
 - Cabecera de tamaño inesperado, extensiones o bytes finales no definidos.
-- Parámetros Argon2id fuera de la política, antes de ejecutar la KDF.
+- Parámetros Argon2id fuera del perfil permitido, antes de ejecutar la KDF.
 - Contraseña incorrecta, nonce/AAD/ciphertext/tag alterados.
 - Payload interno truncado, longitudes cero, longitudes fuera de límites o bytes sobrantes.
 - Protobuf malformado, keysets vacíos o keysets de tipo inesperado.
@@ -158,8 +158,7 @@ Base64 no es cifrado. El modo aleatorio debe protegerse como una credencial secr
 - Los keysets de estos vectores son bytes opacos sintéticos, no keysets Tink válidos. Las pruebas no sustituyen la integración de keysets ni un parser productivo.
 
 **Pendiente antes de implementar la gestión productiva de claves:**
-- Parámetros de producción Argon2id y límites máximos/mínimos de aceptación, definidos mediante benchmark y análisis de abuso de recursos.
-- Límite máximo de contraseña en bytes.
+- Benchmark y aprobación final del perfil Argon2id propuesto, así como confirmación de los límites de entrada y contraseña definidos en [la política de Argon2id](argon2id-policy.md).
 - Perfil AEAD concreto para nombres y pruebas de compatibilidad del backend.
 - Vectores binarios golden definitivos y pruebas multiplataforma.
 - Política de versiones y migración más allá de v1.
