@@ -554,48 +554,74 @@ class _DirectoryOperations:
     def encrypt(self, path: str | os.PathLike[str]) -> None:
         self._manager._require_open()
         source = _path(path)
-        _check_source(source, directory=True)
-        destination_name = encrypt_name_fn(
-            source.name,
-            self._manager._names_primitive,
-            _profile(),
-            _component_limit(source.parent),
-        )
-        _validate_component(destination_name, source.parent)
-        destination = source.with_name(destination_name)
-        source_info = source.lstat()
-        transaction = Transaction.begin(
-            source.parent, "dir_encrypt", source.name, destination.name, source_info
-        )
-        _publish_noreplace(source, destination)
-        _sync_parent_directory(source.parent)
-        transaction.set_state("published")
-        transaction.set_state("source_removed")
-        transaction.set_state("complete")
-        transaction.finish()
+        anchor = DirectoryAnchor(source.parent) if sys.platform.startswith("linux") else None
+        transaction = None
+        try:
+            source_info = (_check_source_at(anchor, source.name, directory=True) if anchor is not None
+                           else _check_source(source, directory=True))
+            destination_name = encrypt_name_fn(
+                source.name,
+                self._manager._names_primitive,
+                _profile(),
+                _component_limit(source.parent),
+            )
+            _validate_component(destination_name, source.parent)
+            destination = source.with_name(destination_name)
+            transaction = Transaction.begin(
+                source.parent, "dir_encrypt", source.name, destination.name, source_info,
+                parent_fd=anchor.fd if anchor is not None else None,
+            )
+            if anchor is not None:
+                anchor.rename_noreplace(source.name, anchor.fd, destination.name)
+                anchor.sync()
+            else:
+                _publish_noreplace(source, destination)
+                _sync_parent_directory(source.parent)
+            transaction.set_state("published")
+            transaction.set_state("source_removed")
+            transaction.set_state("complete")
+            transaction.finish()
+        finally:
+            if transaction is not None:
+                transaction.close()
+            if anchor is not None:
+                anchor.close()
 
     def decrypt(self, path: str | os.PathLike[str]) -> None:
         self._manager._require_open()
         source = _path(path)
-        _check_source(source, directory=True)
-        destination_name = decrypt_name(
-            source.name,
-            self._manager._names_primitive,
-            profile=_profile(),
-            max_component_bytes=_component_limit(source.parent),
-        )
-        _validate_component(destination_name, source.parent)
-        destination = source.with_name(destination_name)
-        source_info = source.lstat()
-        transaction = Transaction.begin(
-            source.parent, "dir_decrypt", source.name, destination.name, source_info
-        )
-        _publish_noreplace(source, destination)
-        _sync_parent_directory(source.parent)
-        transaction.set_state("published")
-        transaction.set_state("source_removed")
-        transaction.set_state("complete")
-        transaction.finish()
+        anchor = DirectoryAnchor(source.parent) if sys.platform.startswith("linux") else None
+        transaction = None
+        try:
+            source_info = (_check_source_at(anchor, source.name, directory=True) if anchor is not None
+                           else _check_source(source, directory=True))
+            destination_name = decrypt_name(
+                source.name,
+                self._manager._names_primitive,
+                profile=_profile(),
+                max_component_bytes=_component_limit(source.parent),
+            )
+            _validate_component(destination_name, source.parent)
+            destination = source.with_name(destination_name)
+            transaction = Transaction.begin(
+                source.parent, "dir_decrypt", source.name, destination.name, source_info,
+                parent_fd=anchor.fd if anchor is not None else None,
+            )
+            if anchor is not None:
+                anchor.rename_noreplace(source.name, anchor.fd, destination.name)
+                anchor.sync()
+            else:
+                _publish_noreplace(source, destination)
+                _sync_parent_directory(source.parent)
+            transaction.set_state("published")
+            transaction.set_state("source_removed")
+            transaction.set_state("complete")
+            transaction.finish()
+        finally:
+            if transaction is not None:
+                transaction.close()
+            if anchor is not None:
+                anchor.close()
 
 
 def encrypt_name_fn(name: str, primitive, profile: NameProfile, limit: int) -> str:
