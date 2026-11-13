@@ -50,9 +50,9 @@ Para un filesystem con límite de componente de 255 bytes:
 - Un plaintext de 156 bytes produce una representación de 254 caracteres ASCII.
 - Un plaintext de 157 bytes produce una representación de 256 caracteres y excede el límite.
 
-Por tanto, **156 bytes UTF-8 es el máximo derivado para esta representación cuando el límite del componente es 255 bytes**. Es un límite en bytes, no en caracteres Unicode.
+Por tanto, **156 bytes UTF-8 es el máximo derivado para el plaintext que se codifica dentro de la representación cifrada cuando el componente destino admite 255 bytes ASCII**. Es un límite de entrada del formato cifrado, no el límite de longitud del nombre plaintext recuperado en Windows: ese último se mide en unidades UTF-16.
 
-La implementación debe consultar el límite real del componente en el filesystem de destino cuando la plataforma lo permita y validar la longitud final codificada antes de modificar el recurso. Si el límite real es inferior, prevalece ese límite. No truncar ciphertext, no cambiar silenciosamente de codificación y no intentar una segunda representación.
+La implementación debe consultar el límite real del componente en el filesystem de destino cuando la plataforma lo permita y validar la longitud final codificada antes de modificar el recurso. La métrica depende de la plataforma: GNU/Linux mide bytes del nombre UTF-8; Windows mide unidades de código UTF-16 para el nombre plaintext. La representación cifrada es ASCII, por lo que sus bytes y unidades UTF-16 coinciden. Si el límite real es inferior, prevalece ese límite. No truncar ciphertext, no cambiar silenciosamente de codificación y no intentar una segunda representación.
 
 La restricción aprobada de 156 bytes reduce el conjunto de nombres que pueden cifrarse. No es una limitación de AES-GCM en sí, sino de la combinación de formato Tink, Base64URL y límite de componente.
 
@@ -149,11 +149,11 @@ El cifrado no oculta jerarquía, cantidad de recursos ni otros metadatos del fil
 - [ ] Validar la representación y las reglas sobre NTFS y ext4 reales.
 
 
-## Platform-specific component-length measurement
+## Medición de longitud por plataforma
 
-The internal component limit uses the native filesystem unit:
+El límite de componente utiliza la unidad nativa del filesystem:
 
-- GNU/Linux: bytes in the strict UTF-8 sequence.
-- Windows: UTF-16 code units (a supplementary character occupies two units).
+- GNU/Linux: bytes de la secuencia UTF-8 estricta.
+- Windows: unidades de código UTF-16; un carácter suplementario ocupa dos unidades.
 
-The encrypted representation (~1 plus Base64URL) is ASCII, so its length is identical in bytes and UTF-16 code units. For the recovered plaintext name, Windows validation must count UTF-16 code units; measuring UTF-8 bytes would incorrectly reject Unicode names that fit in NTFS. The implementation does not normalize Unicode or emulate the filesystem's own equivalence/case-folding rules.
+La representación cifrada (~1 + Base64URL) es ASCII, por lo que su longitud coincide en bytes y unidades UTF-16. Para el nombre plaintext recuperado, Windows debe contar unidades UTF-16; medir bytes UTF-8 rechazaría incorrectamente nombres Unicode que caben en NTFS. La implementación no normaliza Unicode ni sustituye las reglas de equivalencia/casefold del filesystem.
