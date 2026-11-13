@@ -243,7 +243,15 @@ def test_real_filesystem_resources() -> None:
     protected_source = workspace / "protected-master-key.txt"
     protected_payload = b"resource encrypted with a password-protected MasterKey"
     protected_source.write_bytes(protected_payload)
-    with fscryptography.Manager(key=protected_key, password=password) as protected_manager:
+    fallback_key = fscryptography.generate()
+    with fscryptography.Manager(key=fallback_key) as protected_manager:
+        with pytest.raises(AuthenticationError):
+            protected_manager.change_key(protected_key, password="incorrect password")
+        _assert(
+            protected_manager.export_key() == fallback_key,
+            "failed change_key() preserves the previously active context",
+        )
+        protected_manager.change_key(protected_key, password=password)
         _assert(
             protected_manager.export_key() == protected_key,
             "password-protected MasterKey opens and exports canonically",
