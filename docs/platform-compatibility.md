@@ -142,6 +142,18 @@ Antes de publicar soporte v1 se debe:
 - [x] Definir contrato de nombres reservados Windows, UTF-8 estricto y semántica de equivalencia/casefold por filesystem.
 - [x] Configurar CI de backend criptográfico en Windows para CPython 3.11–3.13 (pendiente de una ejecución verde antes de considerar validado el entorno).
 - [ ] Ejecutar pruebas integrales de filesystem en NTFS y ext4.
+- [x] Definir el contrato de metadatos: no preservar metadata de archivos; crear salidas con permisos restrictivos y documentar ACL heredadas en Windows.
 - [ ] Definir el contrato de rutas `PathLike` y validar rutas largas.
 - [ ] Fijar rangos runtime de dependencias y metadatos de empaquetado.
 - [ ] Declarar soporte únicamente después de que todas las pruebas requeridas pasen.
+
+
+## Contrato de metadatos de archivos
+
+Las transformaciones de archivo crean un nuevo objeto de salida; no restauran los metadatos del origen. En GNU/Linux, los resultados se crean con modo 0600, los directorios transaccionales con 0700 y los journals con 0600. En Windows, los objetos reciben ACL heredadas del directorio padre según las reglas del sistema; no se copia la DACL del archivo de origen ni se afirma que el directorio transaccional tenga ACL privada.
+
+No se preservan permisos, propietario/grupo, ACL, xattrs, alternate data streams, atributos especiales ni timestamps del archivo origen. Los metadatos del objeto nuevo siguen las reglas del proceso creador y del filesystem. Esto aplica tanto al archivo cifrado como al plaintext descifrado: el modo original no se restaura automáticamente.
+
+El cifrado/descifrado de directorios solo renombra el mismo objeto y no recorre ni recrea sus hijos. Por ello, los metadatos propios del directorio y los de sus hijos permanecen asociados a los mismos objetos, aunque el filesystem puede actualizar timestamps de namespace (por ejemplo, el directorio padre).
+
+La suite debe comprobar el modo restrictivo en GNU/Linux y registrar el comportamiento ACL de Windows sin afirmar equivalencia POSIX.

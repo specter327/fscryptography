@@ -401,3 +401,27 @@ def test_directory_replacement_during_rename_is_restored(manager, tmp_path, monk
     assert (retained_original / "original.txt").read_text(encoding="utf-8") == "original"
     assert (source / "replacement.txt").read_text(encoding="utf-8") == "replacement"
     assert not any(path.name.startswith("~1") for path in tmp_path.iterdir())
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="POSIX permission-bit contract")
+def test_file_transformations_use_restrictive_mode_without_preserving_source_mode(manager, tmp_path):
+    source = tmp_path / "metadata.txt"
+    source.write_bytes(b"metadata contract")
+    source.chmod(0o640)
+
+    manager.file.encrypt(source)
+    encrypted = tmp_path / "metadata.fscrypt"
+    assert encrypted.is_file()
+    assert encrypted.stat().st_mode & 0o777 == 0o600
+
+    manager.file.decrypt(encrypted)
+    assert source.read_bytes() == b"metadata contract"
+    assert source.stat().st_mode & 0o777 == 0o600
+
+    transaction_dirs = list(tmp_path.glob(".fscryptography-txn-*"))
+    assert transaction_dirs
+    for transaction_dir in transaction_dirs:
+        assert transaction_dir.stat().st_mode & 0o777 == 0o700
+        journal = transaction_dir / "journal.json"
+        if journal.exists():
+            assert journal.stat().st_mode & 0o777 == 0o600

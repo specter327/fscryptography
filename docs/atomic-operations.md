@@ -80,7 +80,7 @@ Si origen y destino coexisten, no se debe eliminar ninguno sin verificar su iden
 - [x] Terminación abrupta del proceso antes y después de persistir `prepared`, `result_ready`, `published`, `source_retained`, `source_removed` y `complete`, mediante subprocess y `os._exit` en GNU/Linux.
 - [ ] Flush verificable de directorio y garantías de durabilidad en Windows.
 - [ ] Validación empírica en NTFS y ext4, incluidas colisiones case-insensitive/case-sensitive.
-- [ ] Política de preservación de permisos, propietario y timestamps.
+- [x] Contrato explícito de metadatos: las transformaciones de archivo crean objetos nuevos con permisos restrictivos; no preservan permisos, propietario ni timestamps del origen. Los renombrados de directorio conservan el objeto y sus metadatos inherentes.
 
 No se siguen enlaces simbólicos y solo se aceptan archivos regulares/directorios reales. Los enlaces duros, especiales y recursos de red quedan fuera de la matriz v1.
 
@@ -89,8 +89,20 @@ Las pruebas `test_windows_source_substitution_during_quarantine_is_never_deleted
 
 ## Terminación abrupta del proceso
 
-La prueba de integración `tests/integration/test_crash_recovery.py` ejecuta la operación en un proceso hijo y fuerza `os._exit` desde la persistencia del journal. Esto evita que se ejecuten bloques `finally`, destructores o limpieza normal. Para cada estado `prepared`, `result_ready`, `published`, `source_retained`, `source_removed` y `complete`, se interrumpe tanto antes como después de escribir el nuevo registro.
+La prueba de integración `tests/real_resources/test_crash_recovery.py` ejecuta la operación en un proceso hijo y fuerza `os._exit` desde la persistencia del journal. Esto evita que se ejecuten bloques `finally`, destructores o limpieza normal. Para cada estado `prepared`, `result_ready`, `published`, `source_retained`, `source_removed` y `complete`, se interrumpe tanto antes como después de escribir el nuevo registro.
 
 La prueba comprueba el estado visible del origen y destino, la clasificación que devuelve `inspect_recovery()`, la repetibilidad de la inspección y que el journal y el directorio transaccional no sean modificados por ella. En particular, contempla la diferencia entre el estado físico y el último estado durable del journal: por ejemplo, el destino puede estar publicado mientras el registro aún dice `result_ready`, o el origen puede haberse retirado mientras el registro todavía dice `source_retained`.
 
 Esta prueba verifica terminación abrupta del proceso en GNU/Linux. No simula pérdida de energía, fallo del kernel, caché del dispositivo ni garantiza durabilidad física del hardware. Windows aún requiere una matriz equivalente de interrupciones y validación específica de su semántica de persistencia.
+
+
+## Contrato de metadatos
+
+Las operaciones de archivo crean un objeto de salida nuevo dentro del directorio transaccional y posteriormente lo publican. **No preservan los metadatos del archivo de origen**:
+
+- En GNU/Linux, el resultado y los journals se crean con modo 0600; los directorios transaccionales se crean con modo 0700. El modo del origen no se copia al archivo cifrado ni al plaintext restaurado.
+- En Windows, los archivos y directorios transaccionales reciben la ACL heredada del directorio padre según las reglas de Windows. No se copia la DACL del archivo origen ni se promete una ACL privada independiente.
+- No se preservan propietario/grupo, ACL, atributos extendidos, alternate data streams, flags especiales ni timestamps del archivo de origen. Los metadatos del nuevo objeto corresponden al proceso creador y al comportamiento del sistema operativo/filesystem.
+- Las operaciones de directorio son renombrados del mismo objeto: no recrean el directorio ni modifican intencionalmente sus metadatos propios o los de sus hijos. El filesystem puede actualizar timestamps asociados al rename, especialmente en el directorio padre.
+
+Este contrato es deliberado: evita restaurar permisos potencialmente demasiado amplios sobre plaintext descifrado. La preservación de metadatos requeriría una política separada, explícita y validada por plataforma; no se debe inferir que el round-trip de contenido implica un round-trip de metadatos.
