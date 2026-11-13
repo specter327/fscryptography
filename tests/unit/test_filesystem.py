@@ -355,6 +355,70 @@ def test_directory_replacement_during_rename_is_restored(manager, tmp_path, monk
 
 
 
+def test_directory_decrypt_rejects_replacement_during_rename(manager, tmp_path, monkeypatch):
+    source = tmp_path / "private-directory"
+    source.mkdir()
+    (source / "original.txt").write_text("original", encoding="utf-8")
+    manager.dir.encrypt(source)
+    encrypted = next(
+        path for path in tmp_path.iterdir()
+        if path.is_dir() and path.name.startswith("~1")
+    )
+    retained_original = tmp_path / "original-directory"
+    rename_noreplace = _filesystem.DirectoryAnchor.rename_noreplace
+    replaced = False
+
+    def replace_before_rename(anchor, source_name, destination_fd, destination_name):
+        nonlocal replaced
+        if source_name == encrypted.name and not replaced:
+            encrypted.rename(retained_original)
+            encrypted.mkdir()
+            (encrypted / "replacement.txt").write_text("replacement", encoding="utf-8")
+            replaced = True
+        return rename_noreplace(anchor, source_name, destination_fd, destination_name)
+
+    monkeypatch.setattr(_filesystem.DirectoryAnchor, "rename_noreplace", replace_before_rename)
+
+    with pytest.raises(InvalidPathError, match="directory identity changed"):
+        manager.dir.decrypt(encrypted)
+
+    assert replaced
+    assert (retained_original / "original.txt").read_text(encoding="utf-8") == "original"
+    assert (encrypted / "replacement.txt").read_text(encoding="utf-8") == "replacement"
+    assert not source.exists()
+
+
+def test_path_directory_rename_restores_replaced_source(tmp_path, monkeypatch):
+    source = tmp_path / "source-directory"
+    destination = tmp_path / "destination-directory"
+    retained_original = tmp_path / "original-directory"
+    source.mkdir()
+    (source / "original.txt").write_text("original", encoding="utf-8")
+    expected = source.lstat()
+    real_rename = os.rename
+    replaced = False
+
+    def replace_before_rename(old, new):
+        nonlocal replaced
+        if Path(old) == source and Path(new) == destination and not replaced:
+            source.rename(retained_original)
+            source.mkdir()
+            (source / "replacement.txt").write_text("replacement", encoding="utf-8")
+            replaced = True
+        return real_rename(old, new)
+
+    from pathlib import Path
+    monkeypatch.setattr(_filesystem.os, "rename", replace_before_rename)
+
+    with pytest.raises(InvalidPathError, match="directory identity changed"):
+        _filesystem._rename_directory_checked_path(source, destination, expected)
+
+    assert replaced
+    assert (retained_original / "original.txt").read_text(encoding="utf-8") == "original"
+    assert (source / "replacement.txt").read_text(encoding="utf-8") == "replacement"
+    assert not destination.exists()
+
+
 def test_file_operations_reject_multiple_hard_links(manager, tmp_path):
     source = tmp_path / "shared.txt"
     alias = tmp_path / "shared-alias.txt"
