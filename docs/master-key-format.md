@@ -158,7 +158,7 @@ Base64 no es cifrado. El modo aleatorio debe protegerse como una credencial secr
 - Los keysets de estos vectores son bytes opacos sintéticos, no keysets Tink válidos. Las pruebas no sustituyen la integración de keysets ni un parser productivo.
 
 **Pendiente antes de implementar la gestión productiva de claves:**
-- Benchmark y aprobación final del perfil Argon2id propuesto, así como confirmación de los límites de entrada y contraseña definidos en [la política de Argon2id](argon2id-policy.md).
+- Confirmación contractual de los límites de entrada y contraseña definidos en [la política de Argon2id](argon2id-policy.md); el perfil criptográfico Argon2id v1 ya está aprobado.
 - Perfil AEAD concreto para nombres y pruebas de compatibilidad del backend.
 - Vectores binarios golden definitivos y pruebas multiplataforma.
 - Política de versiones y migración más allá de v1.
