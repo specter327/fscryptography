@@ -4,7 +4,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/fscryptography?label=PyPI&logo=pypi&logoColor=white)](https://pypi.org/project/fscryptography/)
 [![Python](https://img.shields.io/pypi/pyversions/fscryptography?logo=python&logoColor=white)](https://pypi.org/project/fscryptography/)
-[![Build](https://img.shields.io/github/actions/workflow/status/specter327/fscryptography/publish.yml?label=build&logo=githubactions&logoColor=white)](https://github.com/specter327/fscryptography/actions)
+[![Build](https://img.shields.io/github/actions/workflow/status/specter327/fscryptography/backend-validation.yml?label=backend%20tests&logo=githubactions&logoColor=white)](https://github.com/specter327/fscryptography/actions)
 [![License](https://img.shields.io/badge/license-proprietary%20%2F%20all%20rights%20reserved-8b5cf6)](LICENSE)
 [![Status](https://img.shields.io/badge/status-alpha-f59e0b)](https://github.com/specter327/fscryptography/releases)
 
@@ -191,11 +191,19 @@ El contenido se publica únicamente después de completar la autenticación del 
 Las operaciones de directorio transforman **exclusivamente el nombre del directorio**. No recorren, cifran ni descifran los archivos que contiene.
 
 ```python
-with fscryptography.Manager(key=master_key) as manager:
-    manager.dir.encrypt("proyecto-privado")
-    # El directorio cambia a un nombre codificado.
+from pathlib import Path
 
-    manager.dir.decrypt("~1...")
+directory = Path("proyecto-privado")
+
+with fscryptography.Manager(key=master_key) as manager:
+    manager.dir.encrypt(directory)
+    # El directorio cambia a un nombre codificado.
+    # Usa la ruta resultante real para revertir la transformación:
+    encrypted_directory = next(
+        item for item in directory.parent.iterdir()
+        if item.name.startswith("~1")
+    )
+    manager.dir.decrypt(encrypted_directory)
     # Restaura el nombre original.
 ```
 
