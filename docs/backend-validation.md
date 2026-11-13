@@ -13,8 +13,8 @@ Fecha de revisión: 2026-11-12.
 | Tink Python: AEAD | API documentada | Puede crear primitivas AEAD y serializar keysets. |
 | Tink Python: Streaming AEAD | **Validado en CI** | `AES256_GCM_HKDF_1MB` generó keysets, se serializó/recuperó y superó pruebas de cifrado autenticado en Tink 1.16.1 con Python 3.10–3.13 sobre Ubuntu 26.04. |
 | Serialización de keysets Tink | API binaria documentada | Puede utilizarse el formato Protobuf propio de Tink; requiere autorización explícita para material secreto. |
-| Argon2id | **Prueba automatizada añadida; CI pendiente** | La prueba valida derivación Argon2id de 32 bytes, determinismo y separación por contraseña/salt. Parámetros de producción aún no definidos. |
-| AES-GCM para envolver MasterKey | **Prueba automatizada añadida; CI pendiente** | La prueba valida round-trip AES-256-GCM y rechazo de contraseña, AAD, nonce y ciphertext incorrectos. |
+| Argon2id | **Validado en CI** | Argon2id derivó 32 bytes y pasó pruebas de determinismo y variación por contraseña/salt en Python 3.10–3.13. |
+| AES-GCM para envolver MasterKey | **Prueba automatizada añadida; CI pendiente** | AES-256-GCM pasó round-trip y rechazó clave derivada de contraseña incorrecta, AAD, nonce y ciphertext alterados en Python 3.10–3.13. |
 
 ## Tink Python
 
@@ -88,9 +88,11 @@ Cobertura:
 5. Cifrado/descifrado AES-256-GCM con nonce aleatorio de 12 bytes y AAD.
 6. Rechazo mediante `InvalidTag` ante contraseña incorrecta, AAD alterado, nonce alterado y ciphertext alterado.
 
+**Resultado observado — GitHub Actions Run 5:** [ejecución](https://github.com/specter327/fscryptography/actions/runs/43355002151), commit `94270e5250c2c2d8f50fbb078ec51e87613a6802`, conclusión `success`. Los ocho jobs de la matriz combinada finalizaron correctamente: cuatro jobs Tink Streaming AEAD y cuatro jobs de protección MasterKey. Los cuatro jobs MasterKey aprobaron seis tests cada uno (24 tests en total), con Python 3.10.22, 3.11.18, 3.12.16 y 3.13.18; en todos se instalaron `argon2-cffi 25.1.0` y `cryptography 46.0.7` sobre Linux x86_64/glibc 2.43.
+
 Los parámetros de Argon2id usados por esta prueba son deliberadamente modestos (`time_cost=1`, `memory_cost=8192 KiB`, `parallelism=1`) para una ejecución rápida en CI. **No son parámetros normativos ni recomendación de producción.** Los parámetros de producción, sus límites de parsing y la política frente a entradas hostiles siguen pendientes de benchmark y diseño.
 
-El workflow instala `argon2-cffi>=23.1,<26` y `cryptography>=42,<47`, registra las versiones efectivas y ejecuta la prueba en Python 3.10–3.13. La ejecución queda pendiente hasta que GitHub Actions complete los jobs.
+El workflow instala `argon2-cffi>=23.1,<26` y `cryptography>=42,<47`, registra las versiones efectivas y ejecuta la prueba en Python 3.10–3.13. Resultado: los cuatro jobs finalizaron correctamente con seis tests aprobados por entorno.
 
 ## Arquitectura candidata resultante
 
@@ -143,8 +145,8 @@ ni la auditoría de seguridad.
 5. Verificar que truncamiento, alteración, reordenamiento y AAD incorrecto no producen plaintext aceptado.
 6. Verificar que el plaintext de descifrado no se publica antes de autenticar el final del stream.
 7. Repetir para el keyset AEAD de nombres.
-8. Verificar Argon2id con contraseña correcta/incorrecta, parámetros fuera de límites y contenedor alterado. La prueba de API actual cubre derivación, longitud y variación por contraseña/salt; no valida todavía el parser ni la política de límites de producción.
-9. Verificar AES-GCM de envoltura con nonce/AAD/ciphertext alterados. La prueba de API actual cubre estos rechazos en el nivel AEAD.
+8. Verificar Argon2id con contraseña correcta/incorrecta, parámetros fuera de límites y contenedor alterado. La prueba de API cubre derivación, longitud y variación por contraseña/salt; no valida todavía el parser ni la política de límites de producción.
+9. Verificar AES-GCM de envoltura con nonce/AAD/ciphertext alterados. La prueba de API cubre estos rechazos en el nivel AEAD.
 10. Registrar versiones exactas de Python, Tink, argon2-cffi, cryptography y plataformas.
 
 ## Fuentes oficiales consultadas
