@@ -94,3 +94,21 @@ La prueba de integración `tests/integration/test_crash_recovery.py` ejecuta la 
 La prueba comprueba el estado visible del origen y destino, la clasificación que devuelve `inspect_recovery()`, la repetibilidad de la inspección y que el journal y el directorio transaccional no sean modificados por ella. En particular, contempla la diferencia entre el estado físico y el último estado durable del journal: por ejemplo, el destino puede estar publicado mientras el registro aún dice `result_ready`, o el origen puede haberse retirado mientras el registro todavía dice `source_retained`.
 
 Esta prueba verifica terminación abrupta del proceso en GNU/Linux. No simula pérdida de energía, fallo del kernel, caché del dispositivo ni garantiza durabilidad física del hardware. Windows aún requiere una matriz equivalente de interrupciones y validación específica de su semántica de persistencia.
+
+
+## Enlaces duros y contrato de metadatos (fase de endurecimiento)
+
+Las operaciones de archivo rechazan recursos regulares cuyo contador de enlaces (`st_nlink`) sea distinto de uno. Cifrar una sola entrada de un inode con varios hard links no protegería el contenido: las demás entradas seguirían exponiendo el mismo plaintext. La condición se valida al inspeccionar y abrir el origen, se incluye en la detección de cambios observables durante el streaming y se vuelve a comprobar después de mover el origen a cuarentena, antes de retirarlo.
+
+Esta protección cubre hard links preexistentes y cambios ordinarios observables durante la operación. No constituye una defensa completa frente a un proceso hostil con permisos equivalentes que cree enlaces concurrentemente o manipule el filesystem entre comprobaciones. Los enlaces simbólicos siguen rechazándose. No se recorren directorios, no se siguen junctions/reparse points como recursos fuente y los enlaces duros no se procesan como árboles de alias.
+
+### Metadatos de archivos
+
+El contrato actual preserva el **contenido autenticado** y el nombre lógico codificado en el formato, no los metadatos del archivo original. Los resultados de archivo se crean como recursos nuevos:
+
+- En GNU/Linux, los resultados usan modo restrictivo `0600`; no heredan el modo POSIX del origen.
+- No se promete preservar propietario, grupo, ACL, bits especiales, timestamps, flags, xattrs, etiquetas de seguridad ni atributos extendidos.
+- En Windows, el resultado recibe la ACL y los atributos aplicables al nuevo archivo y al directorio donde se crea; no se promete copiar ACL, propietario, timestamps, atributos DOS ni alternate data streams del origen.
+- El renombrado de un directorio cambia únicamente su nombre de entrada: no recorre su contenido ni reconstruye sus metadatos.
+
+Esta distinción es intencional: copiar metadatos de seguridad sin una política explícita puede ampliar permisos o transferir etiquetas/ACL incompatibles al plaintext o ciphertext. La preservación selectiva de metadatos queda fuera del contrato actual y requerirá una decisión de diseño y pruebas específicas por plataforma antes de incorporarse.
