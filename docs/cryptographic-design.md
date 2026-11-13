@@ -18,7 +18,9 @@ La validación de APIs, keysets, Argon2id y AEAD de envoltura se mantiene en [Va
 
 ## Nombres
 
-Se prefiere AES-256-GCM con nonce único y autenticación, usando un keyset independiente del destinado al contenido. AES-SIV se considera alternativa, pero su determinismo revela igualdad de nombres repetidos bajo una misma clave.
+El perfil AEAD seleccionado para el prototipo es Tink `AES256_GCM`, mediante la interfaz convencional `Aead` y un keyset independiente del destinado al contenido. La prueba de integración en `tests/backend_validation/test_tink_aead_names.py` validó generación/recuperación de keyset, round-trip y rechazo de AAD incorrecto, alteración y truncamiento en Tink 1.16.1 con Python 3.10–3.13 (GitHub Actions Run 10).
+
+Tink administra nonce, prefijo de salida y tag. No se implementará AES-GCM manualmente. El perfil criptográfico y el tipo de keyset están validados para el prototipo; la codificación del nombre, el límite de longitud y la compatibilidad de filesystem siguen pendientes. La propuesta se detalla en [Cifrado de nombres](filename-encryption.md).
 
 ## Separación de claves
 
@@ -36,7 +38,7 @@ La API low-level de `argon2-cffi` ofrece derivación binaria de longitud fija me
 
 La contraseña es necesaria al inicializar Crypto con un contenedor protegido. La contraseña no se almacena. Crypto.generate(password=...) es alias de Crypto.derive(text=...). Crypto.generate() sin contraseña genera un contenedor aleatorio no protegido por contraseña.
 
-Perfil Argon2id aprobado para MasterKey v1: versión 19, memoria 65.536 KiB, 3 iteraciones, paralelismo 1, salt de 16 bytes y salida de 32 bytes. El parser debe aceptar exactamente este perfil y rechazar cualquier otra combinación antes de ejecutar la KDF. Los límites de entrada y contraseña se detallan en [la política Argon2id](argon2id-policy.md) y siguen pendientes de confirmación contractual.
+Perfil Argon2id aprobado para MasterKey v1: versión 19, memoria 65.536 KiB, 3 iteraciones, paralelismo 1, salt de 16 bytes y salida de 32 bytes. El parser debe aceptar exactamente este perfil y rechazar cualquier otra combinación antes de ejecutar la KDF. Los límites de entrada y contraseña están aprobados y se detallan en [la política Argon2id](argon2id-policy.md).
 
 Los campos que describen el contenedor y sus parámetros deben autenticarse. No se implementarán primitivas propias.
 
