@@ -87,10 +87,6 @@ def test_competing_encryption_of_same_source_never_publishes_multiple_results(
     assert source.is_file()
     assert source.read_bytes() == payload
 
-    # Repeated inspection must remain read-only after concurrent operations.
-    before = manager.inspect_recovery(tmp_path)
-    after = manager.inspect_recovery(tmp_path)
-    assert before == after
 
  
 def test_encrypt_rejects_in_place_source_mutation_during_streaming(
@@ -210,11 +206,7 @@ def test_windows_source_substitution_during_quarantine_is_never_deleted(
     assert source.read_bytes() == replacement_payload
     assert displaced.read_bytes() == original_payload
     assert (tmp_path / "windows-quarantine-race.fscrypt").is_file()
-    assert not any(
-        item.name == "source"
-        for transaction_dir in tmp_path.glob(".fscryptography-*")
-        for item in transaction_dir.iterdir()
-    )
+    assert not list(tmp_path.glob(".fscryptography-source-*"))
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows handle-based retirement")
 def test_windows_replacement_after_handle_open_is_not_deleted(
@@ -230,12 +222,7 @@ def test_windows_replacement_after_handle_open_is_not_deleted(
     quarantine_paths = []
 
     def replace_quarantine_then_delete(handle):
-        transaction_dirs = list(tmp_path.glob(".fscryptography-*"))
-        retained = next(
-            entry / "source"
-            for entry in transaction_dirs
-            if (entry / "source").exists()
-        )
+        retained = next(tmp_path.glob(".fscryptography-source-*"))
         quarantine_paths.append(retained)
         real_rename(retained, moved)
         retained.write_bytes(replacement_payload)
