@@ -30,6 +30,8 @@ def _as_component_bytes(name: str) -> bytes:
         raise NameConstraintError("name is not valid UTF-8") from exc
     if not name:
         raise NameConstraintError("name component must not be empty")
+    if name in {".", ".."}:
+        raise NameConstraintError("dot path components are not valid resource names")
     if "\x00" in name or "/" in name:
         raise NameConstraintError("name must be a single path component")
     return encoded
