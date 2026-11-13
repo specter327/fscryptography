@@ -1,0 +1,26 @@
+{
+  "format": "MasterKey v1.0 conformance fixtures",
+  "warning": "Synthetic framing fixtures only. Keyset byte strings are opaque placeholders, not valid Tink protobuf keysets. Argon2id parameters are deliberately weak test-only values and must never be used in production.",
+  "password_utf8": "masterkey-fixture-password",
+  "logical_payload_hex": "00000003616263000000026465",
+  "random_container_hex": "465343524b45590001000001000000140000000d00000003616263000000026465",
+  "protected_container_hex": "465343524b455900010001010000003d0000001d01130000200000000001000100112233445566778899aabbccddeeff01102132435465768798a9bacbf63f739ad3544b7e293f9f7dbe2d378c2659c378ea0ec85667678af6fd",
+  "expected": {
+    "magic_hex": "465343524b455900",
+    "random_header_length": 20,
+    "protected_header_length": 61,
+    "random_payload_length": 13,
+    "protected_payload_length": 29,
+    "salt_hex": "00112233445566778899aabbccddeeff",
+    "nonce_hex": "102132435465768798a9bacb",
+    "argon2id": {
+      "version": 19,
+      "memory_cost_kib": 8192,
+      "time_cost": 1,
+      "parallelism": 1,
+      "hash_length": 32
+    },
+    "synthetic_content_keyset_hex": "616263",
+    "synthetic_name_keyset_hex": "6465"
+  }
+}
