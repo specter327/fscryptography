@@ -19,6 +19,7 @@ Referencia técnica de la librería. El README contiene la presentación del pro
 - [API pública](api-reference.md)
 - [Errores y excepciones — contrato v1](errors.md)
 - [Modelo de seguridad](security-model.md)
+- [Política de seguridad y reporte de vulnerabilidades](../SECURITY.md)
 - [Compatibilidad](platform-compatibility.md)
 - [Construcción y publicación en PyPI](releasing.md)
 - [ADR 0001: diseño inicial](decisions/0001-initial-design.md)

@@ -343,7 +343,7 @@ Consulta [docs/platform-compatibility.md](docs/platform-compatibility.md) para v
 
 Esta librería manipula claves criptográficas y recursos del usuario. Antes de integrarla en un flujo sensible:
 
-- Lee el [modelo de seguridad](docs/security-model.md).
+- Lee el [modelo de seguridad](docs/security-model.md) y la [política de reporte de vulnerabilidades](SECURITY.md).
 - Define un procedimiento de backup y recuperación de MasterKey.
 - Protege la MasterKey y, cuando aplique, su contraseña fuera del árbol cifrado.
 - Prueba primero con datos desechables y verifica el resultado.
