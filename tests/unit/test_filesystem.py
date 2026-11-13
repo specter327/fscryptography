@@ -10,6 +10,7 @@ from fscryptography.errors import (
     AuthenticationError,
     DestinationConflictError,
     FormatError,
+    InvalidPathError,
 )
 from fscryptography import _filesystem
 
@@ -189,14 +190,14 @@ def test_encrypt_syncs_destination_before_removing_source(manager, tmp_path, mon
     def sync_parent(parent):
         calls.append((source.exists(), (tmp_path / "durable.fscrypt").exists()))
 
-    monkeypatch.setattr(_filesystem, "_sync_parent_directory", sync_parent)
+    if __import__("sys").platform.startswith("linux"):
+        monkeypatch.setattr(_filesystem.DirectoryAnchor, "sync", lambda anchor: sync_parent(anchor.path))
+        expected_calls = [(True, True), (False, True)]
+    else:
+        monkeypatch.setattr(_filesystem, "_sync_parent_directory", sync_parent)
+        expected_calls = [(True, True), (False, True)]
     manager.file.encrypt(source)
 
-    expected_calls = (
-        [(True, True), (False, True)]
-        if os.name == "nt"
-        else [(True, True), (False, True), (False, True), (False, True)]
-    )
     assert calls == expected_calls
 
 
@@ -207,7 +208,10 @@ def test_encrypt_preserves_source_when_destination_sync_fails(manager, tmp_path,
     def fail_sync(parent):
         raise AtomicOperationError("injected directory sync failure")
 
-    monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_sync)
+    if __import__("sys").platform.startswith("linux"):
+        monkeypatch.setattr(_filesystem.DirectoryAnchor, "sync", lambda anchor: fail_sync(anchor.path))
+    else:
+        monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_sync)
     with pytest.raises(AtomicOperationError):
         manager.file.encrypt(source)
 
@@ -227,8 +231,21 @@ def test_encrypt_reports_sync_failure_after_source_removal(manager, tmp_path, mo
         if calls == failure_call:
             raise AtomicOperationError("injected transaction-directory sync failure")
 
-    monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_after_source_unlink)
-    with pytest.raises(AtomicOperationError, match="source was removed"):
+    if __import__("sys").platform.startswith("linux"):
+        original_set_state = _filesystem.Transaction.set_state
+
+        def fail_after_source_unlink(transaction, state):
+            if state == "source_removed":
+                original_set_state(transaction, state)
+                raise AtomicOperationError("injected failure after source removal")
+            return original_set_state(transaction, state)
+
+        monkeypatch.setattr(_filesystem.Transaction, "set_state", fail_after_source_unlink)
+        expected_message = "injected failure after source removal"
+    else:
+        monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_after_source_unlink)
+        expected_message = "source was removed"
+    with pytest.raises(AtomicOperationError, match=expected_message):
         manager.file.encrypt(source)
 
     assert not source.exists()
@@ -239,11 +256,18 @@ def test_directory_rename_syncs_parent(manager, tmp_path, monkeypatch):
     directory = tmp_path / "durable-directory"
     directory.mkdir()
     calls = []
-    monkeypatch.setattr(
-        _filesystem,
-        "_sync_parent_directory",
-        lambda parent: calls.append(parent),
-    )
+    if __import__("sys").platform.startswith("linux"):
+        monkeypatch.setattr(
+            _filesystem.DirectoryAnchor,
+            "sync",
+            lambda anchor: calls.append(anchor.path),
+        )
+    else:
+        monkeypatch.setattr(
+            _filesystem,
+            "_sync_parent_directory",
+            lambda parent: calls.append(parent),
+        )
 
     manager.dir.encrypt(directory)
 
@@ -254,15 +278,15 @@ def test_source_replacement_during_retirement_is_restored(manager, tmp_path, mon
     source = tmp_path / "replacement.txt"
     retained_original = tmp_path / "original-retained.txt"
     source.write_bytes(b"original source")
-    publish = _filesystem._publish_noreplace
+    rename_noreplace = _filesystem.DirectoryAnchor.rename_noreplace
 
-    def replace_before_quarantine(src, dst):
-        if src == source and dst.name == "source":
+    def replace_before_quarantine(anchor, source_name, destination_fd, destination_name):
+        if source_name == source.name and destination_name == "source":
             source.rename(retained_original)
             source.write_bytes(b"concurrent replacement")
-        return publish(src, dst)
+        return rename_noreplace(anchor, source_name, destination_fd, destination_name)
 
-    monkeypatch.setattr(_filesystem, "_publish_noreplace", replace_before_quarantine)
+    monkeypatch.setattr(_filesystem.DirectoryAnchor, "rename_noreplace", replace_before_quarantine)
     with pytest.raises(AtomicOperationError, match="identity changed"):
         manager.file.encrypt(source)
 
@@ -298,3 +322,72 @@ def test_recovery_inspection_reports_retained_source(manager, tmp_path, monkeypa
         and record.classification == "source_retained"
         for record in records
     )
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="directory descriptor anchoring is GNU/Linux-only")
+def test_operations_remain_anchored_when_parent_path_is_replaced(manager, tmp_path, monkeypatch):
+    source = tmp_path / "anchored.txt"
+    source.write_bytes(b"anchored payload")
+    moved_parent = tmp_path.with_name(tmp_path.name + "-moved")
+    original_copy = _filesystem._copy_encrypt
+    replaced = False
+
+    def replace_parent_after_transaction(primitive, src, dst, aad):
+        nonlocal replaced
+        if not replaced:
+            tmp_path.rename(moved_parent)
+            tmp_path.mkdir()
+            replaced = True
+        return original_copy(primitive, src, dst, aad)
+
+    monkeypatch.setattr(_filesystem, "_copy_encrypt", replace_parent_after_transaction)
+    manager.file.encrypt(source)
+
+    assert replaced
+    assert (moved_parent / "anchored.fscrypt").is_file()
+    assert not (moved_parent / "anchored.txt").exists()
+    assert list(tmp_path.iterdir()) == []
+    records = manager.inspect_recovery(moved_parent)
+    assert any(record.operation == "file_encrypt" and record.classification == "source_removed" for record in records)
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="descriptor-relative inspection is GNU/Linux-only")
+def test_recovery_inspection_does_not_follow_transaction_symlink(manager, tmp_path):
+    transaction_link = tmp_path / (".fscryptography-txn-" + "0" * 32)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "journal.json").write_text("not a journal", encoding="utf-8")
+    transaction_link.symlink_to(outside, target_is_directory=True)
+
+    records = manager.inspect_recovery(tmp_path)
+    assert len(records) == 1
+    assert records[0].classification == "corrupt"
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="directory descriptor anchoring is GNU/Linux-only")
+def test_directory_replacement_during_rename_is_restored(manager, tmp_path, monkeypatch):
+    source = tmp_path / "directory"
+    retained_original = tmp_path / "original-directory"
+    source.mkdir()
+    (source / "original.txt").write_text("original", encoding="utf-8")
+    rename_noreplace = _filesystem.DirectoryAnchor.rename_noreplace
+    replaced = False
+
+    def replace_before_rename(anchor, source_name, destination_fd, destination_name):
+        nonlocal replaced
+        if source_name == source.name and destination_name != source.name and not replaced:
+            source.rename(retained_original)
+            source.mkdir()
+            (source / "replacement.txt").write_text("replacement", encoding="utf-8")
+            replaced = True
+        return rename_noreplace(anchor, source_name, destination_fd, destination_name)
+
+    monkeypatch.setattr(_filesystem.DirectoryAnchor, "rename_noreplace", replace_before_rename)
+
+    with pytest.raises(InvalidPathError, match="directory identity changed"):
+        manager.dir.encrypt(source)
+
+    assert replaced
+    assert (retained_original / "original.txt").read_text(encoding="utf-8") == "original"
+    assert (source / "replacement.txt").read_text(encoding="utf-8") == "replacement"
+    assert not any(path.name.startswith("~1") for path in tmp_path.iterdir())

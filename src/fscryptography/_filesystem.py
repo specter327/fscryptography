@@ -30,6 +30,7 @@ from .file_format import (
 )
 from .names import NameProfile, decrypt_name, encrypt_name, validate_name
 from ._journal import Transaction
+from ._directory import DirectoryAnchor, _renameat2
 
 _CHUNK_SIZE = 1024 * 1024
 _AT_FDCWD = -100
@@ -185,6 +186,58 @@ def _open_source(path: Path, expected: os.stat_result) -> BinaryIO:
         raise
 
 
+
+
+def _check_source_at(anchor: DirectoryAnchor, name: str, *, directory: bool) -> os.stat_result:
+    info = anchor.stat(name)
+    if stat.S_ISLNK(info.st_mode):
+        raise UnsupportedResourceError("symbolic links are not supported")
+    if directory and not stat.S_ISDIR(info.st_mode):
+        raise UnsupportedResourceError("resource is not a directory")
+    if not directory and not stat.S_ISREG(info.st_mode):
+        raise UnsupportedResourceError("resource is not a regular file")
+    return info
+
+
+def _open_source_at(anchor: DirectoryAnchor, name: str, expected: os.stat_result) -> BinaryIO:
+    descriptor = anchor.open(name, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+    try:
+        current = os.fstat(descriptor)
+        if not stat.S_ISREG(current.st_mode):
+            raise UnsupportedResourceError("resource is not a regular file")
+        if (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino):
+            raise InvalidPathError("source changed while the operation was starting")
+        return os.fdopen(descriptor, "rb")
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def _rename_directory_checked(
+    anchor: DirectoryAnchor,
+    source_name: str,
+    destination_name: str,
+    expected: os.stat_result,
+) -> None:
+    """Rename a directory without replacement and verify the moved identity."""
+    anchor.rename_noreplace(source_name, anchor.fd, destination_name)
+    try:
+        moved = anchor.stat(destination_name)
+        if not stat.S_ISDIR(moved.st_mode) or (moved.st_dev, moved.st_ino) != (expected.st_dev, expected.st_ino):
+            raise InvalidPathError("directory identity changed before rename")
+        anchor.sync()
+    except BaseException as exc:
+        try:
+            anchor.rename_noreplace(destination_name, anchor.fd, source_name)
+            anchor.sync()
+        except BaseException as restore_error:
+            raise AtomicOperationError(
+                "directory identity changed during rename; the moved entry could not be restored safely"
+            ) from restore_error
+        if isinstance(exc, InvalidPathError):
+            raise
+        raise AtomicOperationError("directory rename failed verification; original entry was restored") from exc
+
 def _read_exact(stream: BinaryIO, size: int) -> bytes:
     chunks = bytearray()
     while len(chunks) < size:
@@ -269,6 +322,7 @@ def _retire_source(
     source_path: Path,
     transaction: Transaction,
     expected: os.stat_result,
+    anchor: DirectoryAnchor | None,
     *,
     output_kind: str,
 ) -> None:
@@ -278,7 +332,7 @@ def _retire_source(
     directory, so an interrupted retirement remains visible to recovery
     inspection. The identity check is performed after the atomic rename.
     """
-    if os.name == "nt":
+    if anchor is None:
         # Transaction directories currently inherit the parent's Windows ACL.
         # Until an explicit private ACL is installed, do not treat that location
         # as a protected quarantine; retain the previous identity-check behavior.
@@ -301,24 +355,25 @@ def _retire_source(
                 f"{output_kind} was published but source removal failed"
             ) from exc
 
-    retained = transaction.directory / "source"
     try:
-        _publish_noreplace(source_path, retained)
+        if transaction.directory_fd is None:
+            raise RuntimeError("anchored source retirement requires a transaction directory descriptor")
+        anchor.rename_noreplace(source_path.name, transaction.directory_fd, "source")
     except Exception as exc:
         raise AtomicOperationError(
             f"{output_kind} was published but the source could not be retained safely"
         ) from exc
 
     try:
-        current = retained.lstat()
+        current = os.stat("source", dir_fd=transaction.directory_fd, follow_symlinks=False)
         if (
             not stat.S_ISREG(current.st_mode)
             or (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino)
         ):
             try:
-                _publish_noreplace(retained, source_path)
-                _sync_parent_directory(source_path.parent)
-                _sync_parent_directory(transaction.directory)
+                _renameat2(transaction.directory_fd, "source", anchor.fd, source_path.name)
+                anchor.sync()
+                os.fsync(transaction.directory_fd)
             except Exception as restore_error:
                 raise AtomicOperationError(
                     "source identity changed; the unexpected entry remains in transaction storage "
@@ -330,14 +385,14 @@ def _retire_source(
 
         # Persist both sides of the cross-directory rename before recording the
         # retained state. A crash from this point is inspectable via txn/source.
-        _sync_parent_directory(source_path.parent)
-        _sync_parent_directory(transaction.directory)
+        anchor.sync()
+        os.fsync(transaction.directory_fd)
         transaction.set_state("source_retained")
 
-        retained.unlink()
+        transaction.unlink_retained()
         try:
-            _sync_parent_directory(transaction.directory)
-        except AtomicOperationError as exc:
+            os.fsync(transaction.directory_fd)
+        except OSError as exc:
             raise AtomicOperationError(
                 "source was removed, but transaction storage could not be synchronized"
             ) from exc
@@ -363,48 +418,57 @@ class _FileOperations:
     ) -> None:
         self._manager._require_open()
         source_path = _path(path)
-        source_info = _check_source(source_path, directory=False)
-        profile = _profile()
-        limit = _component_limit(source_path.parent)
-        original_name = source_path.name
-        base, original_extension = split_extension(original_name)
+        anchor = DirectoryAnchor(source_path.parent) if sys.platform.startswith("linux") else None
+        try:
+            source_info = (_check_source_at(anchor, source_path.name, directory=False) if anchor is not None
+                           else _check_source(source_path, directory=False))
+            profile = _profile()
+            limit = _component_limit(source_path.parent)
+            original_name = source_path.name
+            base, original_extension = split_extension(original_name)
 
-        if not isinstance(encrypt_name, bool):
-            raise TypeError("encrypt_name must be bool")
-        if encrypt_name:
-            if new_extension is not None:
-                raise ValueError("new_extension cannot be used when encrypt_name=True")
-            output_extension = None
-            destination_name = encrypt_name_fn(
-                original_name, self._manager._names_primitive, profile, limit
+            if not isinstance(encrypt_name, bool):
+                raise TypeError("encrypt_name must be bool")
+            if encrypt_name:
+                if new_extension is not None:
+                    raise ValueError("new_extension cannot be used when encrypt_name=True")
+                output_extension = None
+                destination_name = encrypt_name_fn(
+                    original_name, self._manager._names_primitive, profile, limit
+                )
+            else:
+                output_extension = ".fscrypt" if new_extension is None else new_extension
+                # build_header performs strict structural validation; validate the
+                # complete destination component against the active filesystem too.
+                destination_name = base + output_extension
+                _validate_component(destination_name, source_path.parent)
+
+            if encrypt_name:
+                _validate_component(destination_name, source_path.parent)
+            header = build_header(
+                original_extension=None if encrypt_name else original_extension,
+                output_extension=output_extension,
+                encrypted_name=encrypt_name,
             )
-        else:
-            output_extension = ".fscrypt" if new_extension is None else new_extension
-            # build_header performs strict structural validation; validate the
-            # complete destination component against the active filesystem too.
-            destination_name = base + output_extension
-            _validate_component(destination_name, source_path.parent)
+            destination = source_path.with_name(destination_name)
+            if destination == source_path:
+                raise ValueError("encrypted destination must differ from the source path")
 
-        if encrypt_name:
-            _validate_component(destination_name, source_path.parent)
-        header = build_header(
-            original_extension=None if encrypt_name else original_extension,
-            output_extension=output_extension,
-            encrypted_name=encrypt_name,
-        )
-        destination = source_path.with_name(destination_name)
-        if destination == source_path:
-            raise ValueError("encrypted destination must differ from the source path")
+            transaction = Transaction.begin(
+                source_path.parent, "file_encrypt", source_path.name, destination.name, source_info,
+                parent_fd=anchor.fd if anchor is not None else None,
+            )
 
-        transaction = Transaction.begin(
-            source_path.parent, "file_encrypt", source_path.name, destination.name, source_info
-        )
-        temporary = transaction.result_path
-        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
-        output = os.fdopen(fd, "wb")
+        except BaseException:
+            if anchor is not None:
+                anchor.close()
+            raise
+        temporary = transaction.result_path if anchor is None else None
+        output = None
         published = False
         try:
-            with _open_source(source_path, source_info) as original:
+            output = os.fdopen(transaction.open_result(), "wb")
+            with (_open_source_at(anchor, source_path.name, source_info) if anchor is not None else _open_source(source_path, source_info)) as original:
                 output.write(header)
                 _copy_encrypt(
                     self._manager._content_primitive,
@@ -413,35 +477,51 @@ class _FileOperations:
                     header,
                 )
                 _sync_close(output)
-            transaction.set_result_ready(temporary.lstat())
-            _publish_noreplace(temporary, destination)
+            transaction.set_result_ready(transaction.stat_result())
+            if anchor is not None:
+                transaction.rename_result_to(anchor.fd, destination.name)
+                anchor.sync()
+            else:
+                _publish_noreplace(temporary, destination)
+                _sync_parent_directory(source_path.parent)
             published = True
-            _sync_parent_directory(source_path.parent)
             transaction.set_state("published")
             _retire_source(
                 source_path,
                 transaction,
                 source_info,
+                anchor,
                 output_kind="encrypted output",
             )
             transaction.set_state("complete")
             transaction.finish()
         finally:
-            if not output.closed:
+            if output is not None and not output.closed:
                 output.close()
+            transaction.close()
+            if anchor is not None:
+                anchor.close()
             # An unpublished result is retained for explicit inspection.
 
     def decrypt(self, path: str | os.PathLike[str]) -> None:
         self._manager._require_open()
         source_path = _path(path)
-        source_info = _check_source(source_path, directory=False)
-        profile = _profile()
-        limit = _component_limit(source_path.parent)
+        anchor = DirectoryAnchor(source_path.parent) if sys.platform.startswith("linux") else None
+        try:
+            source_info = (_check_source_at(anchor, source_path.name, directory=False) if anchor is not None
+                           else _check_source(source_path, directory=False))
+            profile = _profile()
+            limit = _component_limit(source_path.parent)
+
+        except BaseException:
+            if anchor is not None:
+                anchor.close()
+            raise
         transaction = None
         output = None
         published = False
         try:
-            with _open_source(source_path, source_info) as encrypted:
+            with (_open_source_at(anchor, source_path.name, source_info) if anchor is not None else _open_source(source_path, source_info)) as encrypted:
                 header = _read_header(encrypted)
                 if header.encrypted_name:
                     destination_name = decrypt_name(
@@ -462,9 +542,12 @@ class _FileOperations:
                 if destination == source_path:
                     raise ValueError("decrypted destination must differ from the source path")
                 transaction = Transaction.begin(
-                    source_path.parent, "file_decrypt", source_path.name, destination.name, source_info
+                    source_path.parent, "file_decrypt", source_path.name, destination.name, source_info,
+                    parent_fd=anchor.fd if anchor is not None else None,
                 )
-                fd = os.open(transaction.result_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+                fd = (os.open("result", os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600, dir_fd=transaction.directory_fd)
+                      if transaction.directory_fd is not None else
+                      os.open(transaction.result_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600))
                 output = os.fdopen(fd, "wb")
                 _copy_decrypt(
                     self._manager._content_primitive,
@@ -473,16 +556,22 @@ class _FileOperations:
                     header.raw,
                 )
                 _sync_close(output)
-            transaction.set_result_ready(transaction.result_path.lstat())
-            _publish_noreplace(transaction.result_path, destination)
+            transaction.set_result_ready(transaction.stat_result())
+            if anchor is not None:
+                transaction.rename_result_to(anchor.fd, destination.name)
+                anchor.sync()
+                os.fsync(transaction.directory_fd)
+            else:
+                _publish_noreplace(transaction.result_path, destination)
+                _sync_parent_directory(source_path.parent)
+                _sync_parent_directory(transaction.directory)
             published = True
-            _sync_parent_directory(source_path.parent)
-            _sync_parent_directory(transaction.directory)
             transaction.set_state("published")
             _retire_source(
                 source_path,
                 transaction,
                 source_info,
+                anchor,
                 output_kind="plaintext",
             )
             transaction.set_state("complete")
@@ -490,6 +579,10 @@ class _FileOperations:
         finally:
             if output is not None and not output.closed:
                 output.close()
+            if transaction is not None:
+                transaction.close()
+            if anchor is not None:
+                anchor.close()
             # Unpublished output is retained for explicit inspection.
 
 
@@ -500,48 +593,73 @@ class _DirectoryOperations:
     def encrypt(self, path: str | os.PathLike[str]) -> None:
         self._manager._require_open()
         source = _path(path)
-        _check_source(source, directory=True)
-        destination_name = encrypt_name_fn(
-            source.name,
-            self._manager._names_primitive,
-            _profile(),
-            _component_limit(source.parent),
-        )
-        _validate_component(destination_name, source.parent)
-        destination = source.with_name(destination_name)
-        source_info = source.lstat()
-        transaction = Transaction.begin(
-            source.parent, "dir_encrypt", source.name, destination.name, source_info
-        )
-        _publish_noreplace(source, destination)
-        _sync_parent_directory(source.parent)
-        transaction.set_state("published")
-        transaction.set_state("source_removed")
-        transaction.set_state("complete")
-        transaction.finish()
+        anchor = DirectoryAnchor(source.parent) if sys.platform.startswith("linux") else None
+        transaction = None
+        try:
+            source_info = (_check_source_at(anchor, source.name, directory=True) if anchor is not None
+                           else _check_source(source, directory=True))
+            destination_name = encrypt_name_fn(
+                source.name,
+                self._manager._names_primitive,
+                _profile(),
+                _component_limit(source.parent),
+            )
+            _validate_component(destination_name, source.parent)
+            destination = source.with_name(destination_name)
+            transaction = Transaction.begin(
+                source.parent, "dir_encrypt", source.name, destination.name, source_info,
+                parent_fd=anchor.fd if anchor is not None else None,
+            )
+            if anchor is not None:
+                _rename_directory_checked(anchor, source.name, destination.name, source_info)
+            else:
+                _publish_noreplace(source, destination)
+                _sync_parent_directory(source.parent)
+            transaction.set_state("published")
+            transaction.set_state("source_removed")
+            transaction.set_state("complete")
+            transaction.finish()
+        finally:
+            if transaction is not None:
+                transaction.close()
+            if anchor is not None:
+                anchor.close()
 
     def decrypt(self, path: str | os.PathLike[str]) -> None:
         self._manager._require_open()
         source = _path(path)
-        _check_source(source, directory=True)
-        destination_name = decrypt_name(
-            source.name,
-            self._manager._names_primitive,
-            profile=_profile(),
-            max_component_bytes=_component_limit(source.parent),
-        )
-        _validate_component(destination_name, source.parent)
-        destination = source.with_name(destination_name)
-        source_info = source.lstat()
-        transaction = Transaction.begin(
-            source.parent, "dir_decrypt", source.name, destination.name, source_info
-        )
-        _publish_noreplace(source, destination)
-        _sync_parent_directory(source.parent)
-        transaction.set_state("published")
-        transaction.set_state("source_removed")
-        transaction.set_state("complete")
-        transaction.finish()
+        anchor = DirectoryAnchor(source.parent) if sys.platform.startswith("linux") else None
+        transaction = None
+        try:
+            source_info = (_check_source_at(anchor, source.name, directory=True) if anchor is not None
+                           else _check_source(source, directory=True))
+            destination_name = decrypt_name(
+                source.name,
+                self._manager._names_primitive,
+                profile=_profile(),
+                max_component_bytes=_component_limit(source.parent),
+            )
+            _validate_component(destination_name, source.parent)
+            destination = source.with_name(destination_name)
+            transaction = Transaction.begin(
+                source.parent, "dir_decrypt", source.name, destination.name, source_info,
+                parent_fd=anchor.fd if anchor is not None else None,
+            )
+            if anchor is not None:
+                anchor.rename_noreplace(source.name, anchor.fd, destination.name)
+                anchor.sync()
+            else:
+                _publish_noreplace(source, destination)
+                _sync_parent_directory(source.parent)
+            transaction.set_state("published")
+            transaction.set_state("source_removed")
+            transaction.set_state("complete")
+            transaction.finish()
+        finally:
+            if transaction is not None:
+                transaction.close()
+            if anchor is not None:
+                anchor.close()
 
 
 def encrypt_name_fn(name: str, primitive, profile: NameProfile, limit: int) -> str:
