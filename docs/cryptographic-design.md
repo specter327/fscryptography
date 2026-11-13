@@ -12,9 +12,7 @@ Tamaño de segmento objetivo predeterminado: **1 MiB**. Solo se expondrán tama�
 
 ## Backend
 
-Google Tink es el candidato prioritario. La plantilla Python `AES256_GCM_HKDF_1MB` existe, pero su generación de keysets en Python no está cerrada documentalmente: el módulo de plantillas advierte que esas plantillas no pueden utilizarse actualmente para generar keysets, mientras que la guía general muestra ejemplos de generación para Streaming AEAD con otro perfil. Por tanto, Tink Python no se considera todavía validado para el perfil GCM-HKDF elegido.
-
-La decisión queda condicionada a una prueba ejecutable con una versión concreta que cubra generación, serialización, carga, cifrado y descifrado de streams, integridad y plataformas objetivo. No se cambiará silenciosamente a AES-CTR-HMAC.
+Google Tink es el backend seleccionado para el prototipo. La plantilla Python `AES256_GCM_HKDF_1MB` superó una prueba ejecutable con Tink 1.16.1 y Python 3.10–3.13 en Ubuntu: generación de keyset, serialización/recuperación, round-trip y rechazo de AAD incorrecto, truncamiento y alteración. La compatibilidad con otros sistemas operativos/plataformas y la integración sobre archivos reales siguen pendientes. No se cambiará silenciosamente a AES-CTR-HMAC.
 
 La validación de APIs, keysets, Argon2id y AEAD de envoltura se mantiene en [Validación del backend criptográfico](backend-validation.md).
 
@@ -34,7 +32,7 @@ La generación y unicidad de nonces debe delegarse al backend. Todo metadato que
 
 Argon2id es la KDF seleccionada para proteger el contenedor de claves cuando el consumidor proporciona una contraseña. La derivación utiliza un salt aleatorio y parámetros almacenados en el propio contenedor. Argon2id produce una clave de envoltura de 256 bits; esta clave protege mediante AEAD los keysets serializados.
 
-La API low-level de `argon2-cffi` ofrece derivación binaria de longitud fija mediante Argon2id. `cryptography` ofrece AES-GCM para el payload acotado del contenedor. Ambos son candidatos de integración; versiones mínimas, parámetros y compatibilidad deben fijarse antes de implementar.
+La API low-level de `argon2-cffi` ofrece derivación binaria de longitud fija mediante Argon2id. `cryptography` ofrece AES-GCM para el payload acotado del contenedor. Esta composición está seleccionada para el prototipo y cuenta con una prueba de integración automatizada incorporada a CI. La ejecución CI de esa prueba, los parámetros normativos de Argon2id, las versiones mínimas y la compatibilidad de plataformas deben cerrarse antes de implementar la protección del contenedor.
 
 La contraseña es necesaria al inicializar Crypto con un contenedor protegido. La contraseña no se almacena. Crypto.generate(password=...) es alias de Crypto.derive(text=...). Crypto.generate() sin contraseña genera un contenedor aleatorio no protegido por contraseña.
 
