@@ -329,8 +329,9 @@ def _retire_source(
                 f"{output_kind} was published but source removal failed"
             ) from exc
 
-    retained = transaction.retained_path
     try:
+        if transaction.directory_fd is None:
+            raise RuntimeError("anchored source retirement requires a transaction directory descriptor")
         anchor.rename_noreplace(source_path.name, transaction.directory_fd, "source")
     except Exception as exc:
         raise AtomicOperationError(
@@ -430,11 +431,11 @@ class _FileOperations:
             source_path.parent, "file_encrypt", source_path.name, destination.name, source_info,
             parent_fd=anchor.fd if anchor is not None else None,
         )
-        temporary = transaction.result_path
-        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
-        output = os.fdopen(fd, "wb")
+        temporary = transaction.result_path if anchor is None else None
+        output = None
         published = False
         try:
+            output = os.fdopen(transaction.open_result(), "wb")
             with (_open_source_at(anchor, source_path.name, source_info) if anchor is not None else _open_source(source_path, source_info)) as original:
                 output.write(header)
                 _copy_encrypt(
@@ -463,7 +464,7 @@ class _FileOperations:
             transaction.set_state("complete")
             transaction.finish()
         finally:
-            if not output.closed:
+            if output is not None and not output.closed:
                 output.close()
             transaction.close()
             if anchor is not None:
