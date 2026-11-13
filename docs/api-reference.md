@@ -101,8 +101,19 @@ Implementado:
 - close() y administrador de contexto.
 
 Pendiente:
-- Pruebas de interrupción inyectada en cada barrera de persistencia, fallos de filesystem y carreras hostiles.
+- Validación específica en Windows 11 cliente y ampliación de escenarios de interrupción abrupta en Windows.
 - Política segura de retención/limpieza de journals completados.
 - API separada de resolución explícita; no forma parte de esta versión.
-- Pruebas de conformidad ampliadas, vectores golden y validación de mutaciones.
-- Validación de atomicidad/no-sobrescritura y round-trip en Windows/NTFS y GNU/Linux/ext4 reales.
+- Fuzzing/property-based de parsers y revisión de seguridad independiente.
+
+
+## Concurrencia y ciclo de vida
+
+Un Manager puede atender operaciones concurrentes sobre recursos independientes. Cada operación captura una instantánea de las primitivas activas al comenzar:
+
+- change_key() sustituye atómicamente el contexto para operaciones que comiencen después del cambio.
+- Una operación ya iniciada termina con la generación de claves que capturó, aunque change_key() se ejecute mientras procesa el recurso.
+- close() impide iniciar nuevas operaciones y libera la referencia del gestor al contexto; no cancela operaciones que ya capturaron una instantánea.
+- Dos operaciones que compiten sobre el mismo origen no se consideran una operación concurrente válida: la publicación y retirada transaccional permiten que solo una gane de forma segura.
+- close() no garantiza borrado seguro de memoria ni revocación de copias de primitivas ya retenidas por operaciones en curso.
+
