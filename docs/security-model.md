@@ -39,7 +39,7 @@ No se ocultan:
 - Timestamps, permisos, propietarios, ACL y patrones de acceso.
 - Longitudes aproximadas de nombres, según el perfil y la representación.
 
-Las operaciones de archivo crean objetos nuevos y no preservan automáticamente permisos, propietario/grupo, ACL, xattrs, alternate data streams, atributos especiales ni timestamps del origen. En GNU/Linux los resultados usan modo restrictivo 0600; los directorios transaccionales 0700. En Windows los objetos reciben ACL heredadas del padre. Las operaciones de directorio renombran el mismo objeto y no recorren sus hijos.
+Las operaciones de archivo crean objetos nuevos y no preservan automáticamente permisos, propietario/grupo, ACL, xattrs, alternate data streams, atributos especiales ni timestamps del origen. En GNU/Linux los archivos temporales de resultado usan modo restrictivo 0600. No se crean directorios transaccionales dedicados. En Windows los objetos nuevos reciben ACL heredadas del padre. Las operaciones de directorio renombran el mismo objeto y no recorren sus hijos.
 
 La librería no protege contra eliminación, pérdida o corrupción irrecuperable del ciphertext. Perder la MasterKey o la contraseña necesaria implica pérdida práctica de acceso.
 
