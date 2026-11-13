@@ -95,6 +95,12 @@ Esta librería manipula claves criptográficas y archivos del usuario. Revisa el
 
 La protección criptográfica no sustituye las copias de seguridad, el control de acceso del sistema operativo ni una política de gestión y rotación de claves. La implementación y sus pruebas automatizadas no equivalen a una auditoría criptográfica independiente.
 
+## Licencia y derechos de uso
+
+Este proyecto es software propietario y se distribuye bajo una política de **todos los derechos reservados**. No se concede una licencia pública para usar, copiar, modificar o redistribuir el software. Cualquier autorización requiere permiso previo y expreso por escrito del titular de los derechos.
+
+Consulta el archivo [LICENSE](LICENSE). La disponibilidad del código fuente en GitHub o de un paquete en PyPI no implica la concesión de derechos adicionales.
+
 ## Desarrollo
 
 Instala las dependencias de desarrollo:
