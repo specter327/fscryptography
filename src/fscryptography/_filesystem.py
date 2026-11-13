@@ -393,44 +393,50 @@ class _FileOperations:
         self._manager._require_open()
         source_path = _path(path)
         anchor = DirectoryAnchor(source_path.parent) if sys.platform.startswith("linux") else None
-        source_info = (_check_source_at(anchor, source_path.name, directory=False) if anchor is not None
-                       else _check_source(source_path, directory=False))
-        profile = _profile()
-        limit = _component_limit(source_path.parent)
-        original_name = source_path.name
-        base, original_extension = split_extension(original_name)
+        try:
+            source_info = (_check_source_at(anchor, source_path.name, directory=False) if anchor is not None
+                           else _check_source(source_path, directory=False))
+            profile = _profile()
+            limit = _component_limit(source_path.parent)
+            original_name = source_path.name
+            base, original_extension = split_extension(original_name)
 
-        if not isinstance(encrypt_name, bool):
-            raise TypeError("encrypt_name must be bool")
-        if encrypt_name:
-            if new_extension is not None:
-                raise ValueError("new_extension cannot be used when encrypt_name=True")
-            output_extension = None
-            destination_name = encrypt_name_fn(
-                original_name, self._manager._names_primitive, profile, limit
+            if not isinstance(encrypt_name, bool):
+                raise TypeError("encrypt_name must be bool")
+            if encrypt_name:
+                if new_extension is not None:
+                    raise ValueError("new_extension cannot be used when encrypt_name=True")
+                output_extension = None
+                destination_name = encrypt_name_fn(
+                    original_name, self._manager._names_primitive, profile, limit
+                )
+            else:
+                output_extension = ".fscrypt" if new_extension is None else new_extension
+                # build_header performs strict structural validation; validate the
+                # complete destination component against the active filesystem too.
+                destination_name = base + output_extension
+                _validate_component(destination_name, source_path.parent)
+
+            if encrypt_name:
+                _validate_component(destination_name, source_path.parent)
+            header = build_header(
+                original_extension=None if encrypt_name else original_extension,
+                output_extension=output_extension,
+                encrypted_name=encrypt_name,
             )
-        else:
-            output_extension = ".fscrypt" if new_extension is None else new_extension
-            # build_header performs strict structural validation; validate the
-            # complete destination component against the active filesystem too.
-            destination_name = base + output_extension
-            _validate_component(destination_name, source_path.parent)
+            destination = source_path.with_name(destination_name)
+            if destination == source_path:
+                raise ValueError("encrypted destination must differ from the source path")
 
-        if encrypt_name:
-            _validate_component(destination_name, source_path.parent)
-        header = build_header(
-            original_extension=None if encrypt_name else original_extension,
-            output_extension=output_extension,
-            encrypted_name=encrypt_name,
-        )
-        destination = source_path.with_name(destination_name)
-        if destination == source_path:
-            raise ValueError("encrypted destination must differ from the source path")
+            transaction = Transaction.begin(
+                source_path.parent, "file_encrypt", source_path.name, destination.name, source_info,
+                parent_fd=anchor.fd if anchor is not None else None,
+            )
 
-        transaction = Transaction.begin(
-            source_path.parent, "file_encrypt", source_path.name, destination.name, source_info,
-            parent_fd=anchor.fd if anchor is not None else None,
-        )
+        except BaseException:
+            if anchor is not None:
+                anchor.close()
+            raise
         temporary = transaction.result_path if anchor is None else None
         output = None
         published = False
@@ -475,10 +481,16 @@ class _FileOperations:
         self._manager._require_open()
         source_path = _path(path)
         anchor = DirectoryAnchor(source_path.parent) if sys.platform.startswith("linux") else None
-        source_info = (_check_source_at(anchor, source_path.name, directory=False) if anchor is not None
-                       else _check_source(source_path, directory=False))
-        profile = _profile()
-        limit = _component_limit(source_path.parent)
+        try:
+            source_info = (_check_source_at(anchor, source_path.name, directory=False) if anchor is not None
+                           else _check_source(source_path, directory=False))
+            profile = _profile()
+            limit = _component_limit(source_path.parent)
+
+        except BaseException:
+            if anchor is not None:
+                anchor.close()
+            raise
         transaction = None
         output = None
         published = False
