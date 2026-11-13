@@ -74,9 +74,10 @@ jobs:
           print("Installed wheel smoke test passed.")
           PY
 
-      - name: Validate maintenance scripts
+      - name: Validate maintenance and manual demonstration scripts
         run: |
           python -m compileall -q scripts
+          python -m py_compile tests/manual_filesystem_demo.py
           python scripts/update/github.py --help
 
       - name: Run unit, format, and real-filesystem integration tests
