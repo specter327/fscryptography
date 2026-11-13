@@ -29,7 +29,7 @@ from .file_format import (
     split_extension,
 )
 from .names import NameProfile, decrypt_name, encrypt_name, validate_name
-from ._journal import Transaction
+from ._transaction import Transaction
 from ._directory import DirectoryAnchor, _renameat2
 
 _CHUNK_SIZE = 1024 * 1024
@@ -542,22 +542,22 @@ def _retire_source(
 
     try:
         if transaction.directory_fd is None:
-            raise RuntimeError("anchored source retirement requires a transaction directory descriptor")
-        anchor.rename_noreplace(source_path.name, transaction.directory_fd, "source")
+            raise RuntimeError("anchored source retirement requires a parent directory descriptor")
+        anchor.rename_noreplace(source_path.name, transaction.directory_fd, transaction.retained_name)
     except Exception as exc:
         raise AtomicOperationError(
             f"{output_kind} was published but the source could not be retained safely"
         ) from exc
 
     try:
-        current = os.stat("source", dir_fd=transaction.directory_fd, follow_symlinks=False)
+        current = os.stat(transaction.retained_name, dir_fd=transaction.directory_fd, follow_symlinks=False)
         if (
             not stat.S_ISREG(current.st_mode)
             or current.st_nlink != 1
             or (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino)
         ):
             try:
-                _renameat2(transaction.directory_fd, "source", anchor.fd, source_path.name)
+                _renameat2(transaction.directory_fd, transaction.retained_name, anchor.fd, source_path.name)
                 anchor.sync()
                 os.fsync(transaction.directory_fd)
             except Exception as restore_error:
@@ -580,7 +580,7 @@ def _retire_source(
             os.fsync(transaction.directory_fd)
         except OSError as exc:
             raise AtomicOperationError(
-                "source was removed, but transaction storage could not be synchronized"
+                "source was removed, but parent directory could not be synchronized"
             ) from exc
         transaction.set_state("source_removed")
     except AtomicOperationError:
@@ -689,7 +689,7 @@ class _FileOperations:
             transaction.close()
             if anchor is not None:
                 anchor.close()
-            # An unpublished result is retained for explicit inspection.
+            # An unpublished result is removed on normal cleanup; abrupt termination may leave an orphaned temporary sibling.
 
     def decrypt(self, path: str | os.PathLike[str]) -> None:
         material = self._manager._require_open()
@@ -734,7 +734,7 @@ class _FileOperations:
                     source_path.parent, "file_decrypt", source_path.name, destination.name, source_info,
                     parent_fd=anchor.fd if anchor is not None else None,
                 )
-                fd = (os.open("result", os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600, dir_fd=transaction.directory_fd)
+                fd = (os.open(transaction.result_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600, dir_fd=transaction.directory_fd)
                       if transaction.directory_fd is not None else
                       os.open(transaction.result_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600))
                 output = os.fdopen(fd, "wb")
@@ -773,7 +773,7 @@ class _FileOperations:
                 transaction.close()
             if anchor is not None:
                 anchor.close()
-            # Unpublished output is retained for explicit inspection.
+            # Unpublished output is removed on normal cleanup; abrupt termination may leave an orphaned temporary sibling.
 
 
 class _DirectoryOperations:
