@@ -25,7 +25,6 @@ class Transaction:
         self.result_path = parent / self.result_name
         self.retained_path = parent / self.retained_name
         self.directory = parent
-        self.parent_fd = os.dup(parent_fd) if parent_fd is not None else None
         self.directory_fd = os.dup(parent_fd) if parent_fd is not None else None
         self.state = "prepared"
         self._result_created = False
@@ -98,6 +97,3 @@ class Transaction:
         if self.directory_fd is not None:
             os.close(self.directory_fd)
             self.directory_fd = None
-        if self.parent_fd is not None:
-            os.close(self.parent_fd)
-            self.parent_fd = None
