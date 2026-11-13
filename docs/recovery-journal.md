@@ -148,3 +148,18 @@ Las clasificaciones no autorizan mutaciones. En particular, nunca se elimina un 
 ## API pública
 
 La API pública expone `Manager.inspect_recovery(parent) -> tuple[RecoveryRecord, ...]`. Cada `RecoveryRecord` es una dataclass congelada con identificador, operación, estado, clasificación y nombres de recursos. La inspección no necesita la clave maestra, no se ejecuta en el constructor y nunca modifica el filesystem. No existe todavía API de resolución.
+
+
+## Cobertura de endurecimiento añadida
+
+La suite de inspección incluye ahora casos adicionales para:
+
+- JSON vacío, truncado, duplicado, inválido, con BOM, constantes no permitidas y newline no canónico.
+- Identidad del directorio padre distinta de la registrada.
+- Sustitución del resultado temporal y del destino por objetos con identidad diferente.
+- Directorio transaccional presentado como symlink.
+- Inspecciones repetidas para comprobar idempotencia y ausencia de mutaciones.
+- Fallo inyectado al reemplazar el journal: el registro previo debe permanecer legible.
+- Fallo inyectado al sincronizar la entrada del directorio padre: el journal `prepared` debe quedar disponible para inspección.
+
+Estos casos amplían la cobertura de fallos simulados; no equivalen a pruebas de pérdida real de energía ni a pruebas de concurrencia hostil. Siguen pendientes la matriz exhaustiva de fallos en cada operación filesystem, carreras entre validación y mutación, sustitución concurrente del padre/recursos y pruebas sobre filesystems alternativos.
