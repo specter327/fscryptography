@@ -34,7 +34,8 @@ Los fixtures criptográficos deben ser reproducibles. La generación aleatoria d
 | Flags | Cualquier bit reservado activado | Error de formato |
 | Header | Longitud menor, mayor o incompatible con el modo | Error de formato |
 | Payload | Longitud menor/mayor que los bytes disponibles | Error de formato |
-| Payload | Payload por encima del máximo | Error de formato antes de asignación grande |
+| Payload | Payload aleatorio por encima de 64 KiB | Error de formato antes de asignación grande |
+| Payload | Payload protegido por encima de 64 KiB + tag de 16 bytes | Error de formato antes de asignación grande |
 | Framing interno | Longitud cero o superior al máximo | Error de formato |
 | Framing interno | Segundo keyset ausente o truncado | Error de formato |
 | Framing interno | Bytes sobrantes | Error de formato |
