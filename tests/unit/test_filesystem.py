@@ -195,7 +195,8 @@ def test_encrypt_syncs_destination_before_removing_source(manager, tmp_path, mon
         expected_calls = [(True, True), (False, True)]
     else:
         monkeypatch.setattr(_filesystem, "_sync_parent_directory", sync_parent)
-        expected_calls = [(True, True), (False, True)]
+        # Windows does not claim directory-entry durability after source retirement.
+        expected_calls = [(True, True)]
     manager.file.encrypt(source)
 
     assert calls == expected_calls
@@ -243,8 +244,17 @@ def test_encrypt_reports_sync_failure_after_source_removal(manager, tmp_path, mo
         monkeypatch.setattr(_filesystem.Transaction, "set_state", fail_after_source_unlink)
         expected_message = "injected failure after source removal"
     else:
-        monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_after_source_unlink)
-        expected_message = "source was removed"
+        # Windows persists the journal file but cannot fsync the parent directory.
+        # Inject a journal-state failure after the handle-based deletion instead.
+        original_set_state = _filesystem.Transaction.set_state
+
+        def fail_after_source_unlink(transaction, state):
+            if state == "source_removed":
+                raise AtomicOperationError("injected failure after source removal")
+            return original_set_state(transaction, state)
+
+        monkeypatch.setattr(_filesystem.Transaction, "set_state", fail_after_source_unlink)
+        expected_message = "injected failure after source removal"
     with pytest.raises(AtomicOperationError, match=expected_message):
         manager.file.encrypt(source)
 
