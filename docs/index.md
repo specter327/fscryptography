@@ -14,7 +14,6 @@ Referencia técnica de la librería. El README contiene la presentación del pro
 - [Plan de pruebas del formato MasterKey](master-key-format-test-plan.md)
 - [Cifrado de nombres](filename-encryption.md)
 - [Formato de archivos](file-format.md)
-- [Operaciones atómicas](atomic-operations.md)
 - [Operaciones transaccionales y límites ante interrupciones](atomic-operations.md)
 - [API pública](api-reference.md)
 - [Errores y excepciones — contrato v1](errors.md)
