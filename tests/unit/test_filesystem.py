@@ -240,7 +240,7 @@ def test_encrypt_reports_sync_failure_after_source_removal(manager, tmp_path, mo
             return original_set_state(transaction, state)
 
         monkeypatch.setattr(_filesystem.Transaction, "set_state", fail_after_source_unlink)
-        expected_message = "retirement is incomplete"
+        expected_message = "injected failure after source removal"
     else:
         monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_after_source_unlink)
         expected_message = "source was removed"
