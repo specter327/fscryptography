@@ -51,7 +51,7 @@ La suite `tests/unit/test_filesystem_concurrency.py` añade:
 - Sustitución determinista del origen durante la retirada y sustitución del directorio padre durante la operación, cubiertas por pruebas GNU/Linux existentes en `tests/unit/test_filesystem.py`.
 - Sustitución determinista de un directorio durante su renombrado, también cubierta en GNU/Linux.
 
-La detección de modificación compara metadatos observables del descriptor; **no es una instantánea criptográfica del origen ni protege frente a un escritor hostil que pueda manipular metadatos, explotar la granularidad temporal del filesystem o modificar bytes y restaurarlos antes de la comprobación**. En Windows, la retirada aún usa `lstat` seguido de `unlink` y no tiene la cuarentena anclada por descriptor de GNU/Linux; por tanto, la carrera de sustitución entre ambas llamadas no está cerrada. La sustitución de destinos sigue dependiendo de la primitiva atómica no-replace, pero falta una prueba determinista de colisión en el instante exacto de publicación.
+La detección de modificación compara metadatos observables del descriptor; **no es una instantánea criptográfica del origen ni protege frente a un escritor hostil que pueda manipular metadatos, explotar la granularidad temporal del filesystem o modificar bytes y restaurarlos antes de la comprobación**. En Windows, la retirada aún usa `lstat` seguido de `unlink` y no tiene la cuarentena anclada por descriptor de GNU/Linux; por tanto, la carrera de sustitución entre ambas llamadas no está cerrada. La publicación GNU/Linux usa `renameat2(RENAME_NOREPLACE)` y ahora tiene una prueba determinista que crea un destino competidor justo antes del renombrado; el destino concurrente y el origen deben permanecer intactos. La prueba no sustituye la validación empírica en todos los filesystems.
 
 ## Estados tras interrupción
 
@@ -76,7 +76,7 @@ Si origen y destino coexisten, no se debe eliminar ninguno sin verificar su iden
 - [x] Pruebas deterministas GNU/Linux de sustitución del padre, origen y directorio durante la operación.
 - [ ] Garantía frente a escritores hostiles capaces de manipular/restaurar metadatos o competir dentro de su granularidad.
 - [ ] Retirada de origen resistente a TOCTOU en Windows (cuarentena privada con identidad verificable).
-- [ ] Prueba determinista de colisión de destino justo en el punto de publicación.
+- [x] Prueba GNU/Linux de colisión de destino justo en el punto de publicación.
 - [ ] Interrupción abrupta del proceso después de cada barrera persistente.
 - [ ] Flush verificable de directorio y garantías de durabilidad en Windows.
 - [ ] Validación empírica en NTFS y ext4, incluidas colisiones case-insensitive/case-sensitive.
