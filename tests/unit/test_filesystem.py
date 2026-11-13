@@ -6,10 +6,12 @@ import pytest
 
 import fscryptography
 from fscryptography.errors import (
+    AtomicOperationError,
     AuthenticationError,
     DestinationConflictError,
     FormatError,
 )
+from fscryptography import _filesystem
 
 
 @pytest.fixture
@@ -153,3 +155,66 @@ def test_empty_new_extension_is_supported(manager, tmp_path):
     assert encrypted.exists()
     manager.file.decrypt(encrypted)
     assert source.read_bytes() == b"content"
+
+
+def test_encrypt_syncs_destination_before_removing_source(manager, tmp_path, monkeypatch):
+    source = tmp_path / "durable.txt"
+    source.write_bytes(b"durability")
+    calls = []
+
+    def sync_parent(parent):
+        calls.append((source.exists(), (tmp_path / "durable.fscrypt").exists()))
+
+    monkeypatch.setattr(_filesystem, "_sync_parent_directory", sync_parent)
+    manager.file.encrypt(source)
+
+    assert calls == [(True, True), (False, True)]
+
+
+def test_encrypt_preserves_source_when_destination_sync_fails(manager, tmp_path, monkeypatch):
+    source = tmp_path / "sync-failure.txt"
+    source.write_bytes(b"preserve source")
+
+    def fail_sync(parent):
+        raise AtomicOperationError("injected directory sync failure")
+
+    monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_sync)
+    with pytest.raises(AtomicOperationError):
+        manager.file.encrypt(source)
+
+    assert source.read_bytes() == b"preserve source"
+    assert (tmp_path / "sync-failure.fscrypt").is_file()
+
+
+def test_encrypt_reports_sync_failure_after_source_removal(manager, tmp_path, monkeypatch):
+    source = tmp_path / "late-sync-failure.txt"
+    source.write_bytes(b"published")
+    calls = 0
+
+    def fail_second_sync(parent):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise AtomicOperationError("injected second sync failure")
+
+    monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_second_sync)
+    with pytest.raises(AtomicOperationError, match="source was removed"):
+        manager.file.encrypt(source)
+
+    assert not source.exists()
+    assert (tmp_path / "late-sync-failure.fscrypt").is_file()
+
+
+def test_directory_rename_syncs_parent(manager, tmp_path, monkeypatch):
+    directory = tmp_path / "durable-directory"
+    directory.mkdir()
+    calls = []
+    monkeypatch.setattr(
+        _filesystem,
+        "_sync_parent_directory",
+        lambda parent: calls.append(parent),
+    )
+
+    manager.dir.encrypt(directory)
+
+    assert calls == [tmp_path]
