@@ -35,6 +35,7 @@ from ._directory import DirectoryAnchor, _renameat2
 _CHUNK_SIZE = 1024 * 1024
 _AT_FDCWD = -100
 _RENAME_NOREPLACE = 1
+_FILE_ATTRIBUTE_REPARSE_POINT = 0x0400
 
 
 class _NonClosing:
@@ -151,12 +152,17 @@ def _publish_noreplace(source: Path, destination: Path) -> None:
     raise AtomicOperationError("no verified no-replace primitive for this platform")
 
 
+def _is_reparse_point(info: os.stat_result) -> bool:
+    """Return whether Windows marks this filesystem entry as a reparse point."""
+    return bool(getattr(info, "st_file_attributes", 0) & _FILE_ATTRIBUTE_REPARSE_POINT)
+
+
 def _check_source(path: Path, *, directory: bool) -> os.stat_result:
     try:
         info = path.lstat()
     except OSError:
         raise
-    if stat.S_ISLNK(info.st_mode):
+    if stat.S_ISLNK(info.st_mode) or _is_reparse_point(info):
         raise UnsupportedResourceError("symbolic links are not supported")
     if directory and not stat.S_ISDIR(info.st_mode):
         raise UnsupportedResourceError("resource is not a directory")
@@ -198,8 +204,8 @@ def _open_source(path: Path, expected: os.stat_result) -> BinaryIO:
 
 def _check_source_at(anchor: DirectoryAnchor, name: str, *, directory: bool) -> os.stat_result:
     info = anchor.stat(name)
-    if stat.S_ISLNK(info.st_mode):
-        raise UnsupportedResourceError("symbolic links are not supported")
+    if stat.S_ISLNK(info.st_mode) or _is_reparse_point(info):
+        raise UnsupportedResourceError("symbolic links and filesystem reparse points are not supported")
     if directory and not stat.S_ISDIR(info.st_mode):
         raise UnsupportedResourceError("resource is not a directory")
     if not directory and not stat.S_ISREG(info.st_mode):
@@ -505,6 +511,7 @@ def _retire_source(
             moved = retained.lstat()
             if (
                 not stat.S_ISREG(moved.st_mode)
+                or _is_reparse_point(moved)
                 or moved.st_nlink != 1
                 or (moved.st_dev, moved.st_ino) != (expected.st_dev, expected.st_ino)
             ):
