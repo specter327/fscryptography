@@ -7,7 +7,7 @@ on:
       - "src/**"
       - "tests/backend_validation/**"
       - "tests/master_key_format/**"
-      - "tests/unit/**"
+      - "tests/unit/**"\n      - "tests/file_format/**"
       - "pyproject.toml"
   pull_request:
     paths:
