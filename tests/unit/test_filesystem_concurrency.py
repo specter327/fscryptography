@@ -32,7 +32,7 @@ def test_shared_manager_supports_concurrent_independent_file_operations(
 
     def encrypt_and_decrypt(name: str, payload: bytes) -> None:
         source = tmp_path / name
-        encrypted = tmp_path / f"{name}.fscrypt"
+        encrypted = source.with_suffix(".fscrypt")
         barrier.wait(timeout=10)
 
         manager.file.encrypt(source)
@@ -59,7 +59,7 @@ def test_competing_encryption_of_same_source_never_publishes_multiple_results(
 ):
     """Two callers racing on one source must not create two valid outcomes."""
     source = tmp_path / "contended.bin"
-    payload = b"single-source contention payload\\x00" * 8192
+    payload = b"single-source contention payload" * 8192
     source.write_bytes(payload)
 
     barrier = Barrier(2)
