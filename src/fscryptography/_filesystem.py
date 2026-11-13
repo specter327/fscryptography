@@ -128,9 +128,11 @@ def _publish_noreplace(source: Path, destination: Path) -> None:
         error = ctypes.get_errno()
         if error == errno.EEXIST:
             raise DestinationConflictError("destination already exists")
-        raise AtomicOperationError(
-            f"Linux no-replace publication failed: {os.strerror(error)}"
-        ) from OSError(error, os.strerror(error))
+        if error in {errno.ENOSYS, errno.EINVAL, errno.EOPNOTSUPP}:
+            raise AtomicOperationError(
+                f"Linux no-replace publication is unsupported: {os.strerror(error)}"
+            ) from OSError(error, os.strerror(error))
+        raise OSError(error, os.strerror(error), str(destination))
 
     raise AtomicOperationError("no verified no-replace primitive for this platform")
 
@@ -175,6 +177,8 @@ def _copy_encrypt(primitive, source: BinaryIO, destination: BinaryIO, aad: bytes
                 if not chunk:
                     break
                 encrypted.write(chunk)
+    except OSError:
+        raise
     except Exception as exc:
         raise BackendError("Tink Streaming AEAD encryption failed") from exc
 
@@ -187,6 +191,8 @@ def _copy_decrypt(primitive, source: BinaryIO, destination: BinaryIO, aad: bytes
                 if not chunk:
                     break
                 destination.write(chunk)
+    except OSError:
+        raise
     except Exception as exc:
         raise AuthenticationError("file content authentication failed") from exc
 
