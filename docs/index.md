@@ -9,6 +9,7 @@ Referencia técnica de la librería. El README es una presentación breve; las d
 - [Validación del backend criptográfico](backend-validation.md)
 - [Gestión de claves](key-management.md)
 - [Formato de MasterKey](master-key-format.md)
+- [Plan de pruebas del formato MasterKey](master-key-format-test-plan.md)
 - [Cifrado de nombres](filename-encryption.md)
 - [Formato de archivos](file-format.md)
 - [Operaciones atómicas](atomic-operations.md)
