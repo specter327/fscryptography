@@ -142,5 +142,8 @@ El cifrado no oculta jerarquía, cantidad de recursos ni otros metadatos del fil
 - [x] Definir preservación UTF-8 y respeto a la semántica efectiva de mayúsculas/casefold del filesystem.
 - [x] Definir política de detección de doble cifrado y tratamiento de candidatos `~1`.
 - [x] Definir manejo de colisiones y publicación sin sobrescritura.
-- [ ] Implementar el contrato en la librería.
+- [x] Implementar el primer codec `~1` + Base64URL, la validación de nombres y el adaptador de keysets Tink.
+- [x] Añadir pruebas unitarias para reglas de nombres, canonicalidad, límites y round-trip AEAD.
+- [ ] Integrar el keyset de nombres con el contenedor MasterKey.
+- [ ] Integrar cifrado/descifrado con operaciones reales de rename y publicación sin sobrescritura.
 - [ ] Validar la representación y las reglas sobre NTFS y ext4 reales.
