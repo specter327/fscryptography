@@ -66,6 +66,17 @@ Todas las excepciones propias derivan de FsCryptographyError. La jerarquía, la 
 
 Los errores de argumentos conservan TypeError o ValueError; los errores ordinarios del filesystem conservan las excepciones estándar de Python cuando sea posible. La contraseña incorrecta y la alteración de un contenedor protegido se presentan como AuthenticationError, sin distinguir públicamente ambos casos.
 
-## Pendiente
+## Estado de implementación
 
-Definir si Crypto.generate() y Crypto.derive() se implementan como métodos estáticos o de clase; soporte de PathLike; normalización de new_extension; comportamiento ante operaciones repetidas; concurrencia y uso desde múltiples hilos/tareas. Ambas funciones devuelven un contenedor MasterKey.
+Implementados en la fachada pública:
+- `Crypto.generate(password=None)`.
+- `Crypto.derive(text=...)` como alias de generación protegida.
+- Inicialización desde MasterKey aleatorio o protegido.
+- `close()`, administrador de contexto y rechazo de acceso a primitivas internas tras el cierre.
+
+Pendientes:
+- `crypto.file.encrypt()` y `crypto.file.decrypt()`.
+- `crypto.dir.encrypt()` y `crypto.dir.decrypt()`.
+- Definir y cerrar el formato de archivo antes de implementarlo; soporte de PathLike; normalización de `new_extension`; comportamiento ante operaciones repetidas; concurrencia y uso desde múltiples hilos/tareas.
+
+Las firmas de archivos/directorios anteriores documentan el contrato previsto, no una funcionalidad disponible en la versión actual.
