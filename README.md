@@ -4,7 +4,7 @@
 
 Proporciona una interfaz de alto nivel basada en rutas, con procesamiento autenticado y segmentado de archivos. Su diseño es autónomo: no depende de herramientas de exploración de recursos ni de aplicaciones concretas.
 
-> **Estado del proyecto:** implementación inicial en curso. Están implementados la validación y codec de nombres, la generación/apertura del contenedor MasterKey v1 con keysets Tink reales y la fachada inicial `Crypto`. Las operaciones de cifrado/descifrado de archivos y directorios sobre rutas reales todavía no están implementadas.
+> **Estado del proyecto:** implementación inicial en curso. Están implementados la validación y codec de nombres, la generación/apertura del contenedor MasterKey v1 con keysets Tink reales y la API pública `generate()`/`Manager` para mantener un contexto criptográfico reutilizable. Las operaciones de cifrado/descifrado de archivos y directorios sobre rutas reales todavía no están implementadas.
 
 ## Alcance
 
@@ -27,7 +27,7 @@ fscryptography opera sobre rutas y no depende de fsresource-tree. Puede utilizar
 
 ## Documentación
 
-La [documentación técnica](docs/index.md) contiene el alcance detallado, arquitectura, diseño criptográfico, gestión de claves, formatos, operaciones atómicas, API, errores, modelo de seguridad y compatibilidad.
+La API pública expone fscryptography.generate() y fscryptography.Manager(key=...); las operaciones de archivos/directorios aún están pendientes. La [documentación técnica](docs/index.md) contiene el alcance detallado, arquitectura, diseño criptográfico, gestión de claves, formatos, operaciones atómicas, API, errores, modelo de seguridad y compatibilidad.
 
 ## Estado de desarrollo
 
