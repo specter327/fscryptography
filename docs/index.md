@@ -7,6 +7,7 @@ Referencia técnica de la librería. El README es una presentación breve; las d
 - [Arquitectura](architecture.md)
 - [Diseño criptográfico](cryptographic-design.md)
 - [Gestión de claves](key-management.md)
+- [Formato de MasterKey](master-key-format.md)
 - [Cifrado de nombres](filename-encryption.md)
 - [Formato de archivos](file-format.md)
 - [Operaciones atómicas](atomic-operations.md)
