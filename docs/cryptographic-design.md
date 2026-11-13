@@ -16,7 +16,7 @@ La estructura propuesta del archivo se documenta en [Formato de archivos](file-f
 
 ## Nombres
 
-El perfil AEAD de nombres es Tink `AES256_GCM`, mediante la interfaz convencional `Aead` y un keyset independiente del destinado al contenido. El codec usa la representación `~1` + Base64URL sin padding, AAD constante `fscryptography:filename:v1` y validación estricta de nombres. El límite derivado es 156 bytes UTF-8 cuando el límite del componente es 255 bytes. La integración con MasterKey está implementada y probada a nivel unitario; las operaciones reales de rename y publicación sin sobrescritura siguen pendientes. Véase [Cifrado de nombres](filename-encryption.md).
+El perfil AEAD de nombres es Tink `AES256_GCM`, mediante la interfaz convencional `Aead` y un keyset independiente del destinado al contenido. El codec usa la representación `~1` + Base64URL sin padding, AAD constante `fscryptography:filename:v1` y validación estricta de nombres. El límite derivado es 156 bytes UTF-8 cuando el límite del componente es 255 bytes. La integración con MasterKey y las operaciones de transformación de nombres mediante rename/publicación sin reemplazo están implementadas. La validación integral de comportamiento y concurrencia en la matriz de filesystems objetivo sigue pendiente. Véase [Cifrado de nombres](filename-encryption.md).
 
 ## Separación de claves
 
