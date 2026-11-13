@@ -1,66 +1,71 @@
 # API pública
 
 ## Principios
-La API opera sobre rutas del filesystem. No expone cifrado general de bytes ni streams suministrados por el consumidor. Las firmas siguientes describen el contrato público previsto; los tipos concretos de ruta y algunos parámetros opcionales permanecen sujetos a la especificación de cada operación.
 
-## Generación y derivación
-```python
-# Genera material criptográfico aleatorio
-master_key = Crypto.generate()
-crypto = Crypto(master_key=master_key)
+La API opera sobre rutas del filesystem. No expone cifrado general de bytes ni streams suministrados por el consumidor. La clave maestra se representa públicamente como texto Base64 estándar y se decodifica a bytes al entrar en la librería.
 
-# Genera material criptográfico y protege el contenedor con contraseña
-master_key = Crypto.generate(password="passphrase")
-crypto = Crypto(master_key=master_key, password="passphrase")
+## Generación de clave maestra
 
-# Equivalente explícito
-master_key = Crypto.derive(text="passphrase")
-crypto = Crypto(master_key=master_key, password="passphrase")
-```
+    import fscryptography
 
-Crypto.generate(password=...) es alias de Crypto.derive(text=...). Ambos generan keysets criptográficos y devuelven un contenedor MasterKey protegido mediante una clave derivada de la contraseña con Argon2id.
+    # Generación aleatoria
+    master_key = fscryptography.generate()
 
-La contraseña es necesaria cada vez que se inicializa Crypto con un contenedor protegido. No se almacena en MasterKey. La inicialización de un contenedor aleatorio generado sin contraseña no requiere argumento password.
+    # Generación de keysets protegidos por contraseña
+    master_key = fscryptography.generate(password="passphrase")
 
-## Inicialización
-```python
-# Contenedor aleatorio
-crypto = Crypto(master_key=master_key)
+Ambas variantes devuelven una cadena Base64 canónica. La cadena representa el contenedor autocontenido MasterKey; no representa una clave AES plana. La variante con contraseña protege el contenedor mediante Argon2id y AES-256-GCM.
 
-# Contenedor protegido
-crypto = Crypto(master_key=master_key, password="passphrase")
+## Gestor y contexto criptográfico
 
-with Crypto(master_key=master_key, password="passphrase") as crypto:
-    ...
-```
+    manager = fscryptography.Manager(key=master_key)
 
-Si el contenedor está protegido, omitir password debe producir un error de inicialización. Una contraseña incorrecta, un contenedor alterado o uno malformado también debe producir un error; nunca se regenerarán claves silenciosamente.
+    # Para un contenedor protegido:
+    manager = fscryptography.Manager(
+        key=master_key,
+        password="passphrase",
+    )
 
-La instancia ofrecerá close() y rechazará operaciones tras el cierre. La limpieza de secretos es de mejor esfuerzo.
+    with fscryptography.Manager(key=master_key) as manager:
+        ...
 
-## Archivos
-```python
-crypto.file.encrypt(
-    path="document.txt",
-    new_extension=".encrypted",
-    encrypt_name=False,
-)
-crypto.file.decrypt(path="document.txt.encrypted")
-```
+El gestor decodifica Base64 a bytes, valida y abre el contenedor una sola vez, y conserva en su contexto las primitivas Tink independientes para contenido y nombres. Las operaciones posteriores reutilizan ese contexto; no reciben la clave en cada llamada.
 
-path identifica el archivo. new_extension determina la extensión visible cuando el nombre permanece sin cifrar. encrypt_name indica si se cifra el nombre completo, incluida extensión original.
+Si el contenedor fue generado con password=..., la contraseña debe suministrarse al construir el gestor. La contraseña se consume durante la apertura y no se conserva en el objeto. Esto es obligatorio para mantener el contrato MasterKey protegido ya aprobado; no es posible abrirlo únicamente con la cadena Base64.
 
-## Directorios
-```python
-crypto.dir.encrypt(path="private-directory")
-crypto.dir.decrypt(path="encrypted-directory")
-```
+## Cambio y exportación de clave
 
-Estas operaciones transforman exclusivamente el nombre del directorio.
+    manager.change_key(new_key)
+
+    # Para una nueva clave protegida:
+    manager.change_key(new_key, password="new passphrase")
+
+    exported_key: str = manager.export_key()
+
+change_key() valida y abre completamente la nueva clave antes de sustituir el contexto activo. Si falla, el contexto anterior permanece intacto. export_key() devuelve la representación Base64 canónica de la clave activa.
+
+## Operaciones sobre recursos
+
+    manager.file.encrypt(path="document.txt")
+    manager.file.decrypt(path="document.txt.encrypted")
+
+    manager.dir.encrypt(path="private-directory")
+    manager.dir.decrypt(path="encrypted-directory")
+
+Las operaciones de archivos y directorios son métodos del contexto del gestor y reutilizan las primitivas abiertas. Los directorios transforman exclusivamente su propio nombre; no recorren ni cifran su contenido. Estas operaciones siguen pendientes de implementación.
+
+## Representación de claves
+
+- Frontera pública: Base64 estándar ASCII (str).
+- Interior de la librería: contenedor binario (bytes) y primitivas criptográficas abiertas.
+- Exportación: serialización de los bytes internos a Base64 estándar.
+- La codificación Base64 no es cifrado ni protección de secretos.
+
+El gestor no conserva la contraseña. close() invalida el contexto y libera referencias a la clave y las primitivas; el borrado seguro de memoria no está garantizado por Python.
 
 ## Retornos y errores
 
-Las operaciones file.encrypt(), file.decrypt(), dir.encrypt() y dir.decrypt() devuelven None al completarse correctamente. Los fallos se comunican mediante excepciones tipadas; no se devuelve False como sustituto de una excepción.
+Las operaciones file.encrypt(), file.decrypt(), dir.encrypt() y dir.decrypt() devolverán None al completarse correctamente. Los fallos se comunicarán mediante excepciones tipadas; no se devolverá False como sustituto de una excepción.
 
 Todas las excepciones propias derivan de FsCryptographyError. La jerarquía, la clasificación de fallos y la política de preservación de excepciones estándar se definen en [Errores y excepciones](errors.md).
 
@@ -68,15 +73,16 @@ Los errores de argumentos conservan TypeError o ValueError; los errores ordinari
 
 ## Estado de implementación
 
-Implementados en la fachada pública:
-- `Crypto.generate(password=None)`.
-- `Crypto.derive(text=...)` como alias de generación protegida.
-- Inicialización desde MasterKey aleatorio o protegido.
-- `close()`, administrador de contexto y rechazo de acceso a primitivas internas tras el cierre.
+Implementado:
+- fscryptography.generate(password=None).
+- fscryptography.Manager(key, password=None).
+- Decodificación Base64 a bytes para el contexto interno.
+- Reutilización de primitivas abiertas por el gestor.
+- Manager.change_key() con sustitución atómica del contexto.
+- Manager.export_key() a Base64.
+- close() y administrador de contexto.
 
-Pendientes:
-- `crypto.file.encrypt()` y `crypto.file.decrypt()`.
-- `crypto.dir.encrypt()` y `crypto.dir.decrypt()`.
-- Definir y cerrar el formato de archivo antes de implementarlo; soporte de PathLike; normalización de `new_extension`; comportamiento ante operaciones repetidas; concurrencia y uso desde múltiples hilos/tareas.
-
-Las firmas de archivos/directorios anteriores documentan el contrato previsto, no una funcionalidad disponible en la versión actual.
+Pendiente:
+- manager.file.encrypt() y manager.file.decrypt().
+- manager.dir.encrypt() y manager.dir.decrypt().
+- Formato definitivo de archivo, operaciones sobre rutas y garantías del filesystem.
