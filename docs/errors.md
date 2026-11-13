@@ -79,4 +79,4 @@ Utilizar AtomicOperationError cuando falle la publicación o la coordinación de
 No afirmar que una operación fue revertida si la recuperación no pudo confirmarse. El error debe permitir inspeccionar la cadena causal sin exponer material sensible.
 
 ## Estado
-La jerarquía y la política de retornos/excepciones quedan definidas como contrato de la API v1. La implementación de las clases, sus exportaciones públicas y las pruebas de clasificación siguen pendientes.
+La jerarquía de excepciones está implementada en `src/fscryptography/errors.py` y exportada desde el paquete raíz. La clasificación exhaustiva de fallos durante las operaciones de filesystem y criptográficas integradas sigue pendiente de esas operaciones.
