@@ -278,6 +278,25 @@ def _retire_source(
     directory, so an interrupted retirement remains visible to recovery
     inspection. The identity check is performed after the atomic rename.
     """
+    if os.name == "nt":
+        # Transaction directories currently inherit the parent's Windows ACL.
+        # Until an explicit private ACL is installed, do not treat that location
+        # as a protected quarantine; retain the previous identity-check behavior.
+        current = source_path.lstat()
+        if (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino):
+            raise AtomicOperationError(
+                "source changed before removal; published output and source were preserved"
+            )
+        try:
+            source_path.unlink()
+            _sync_parent_directory(source_path.parent)
+            transaction.set_state("source_removed")
+            return
+        except Exception as exc:
+            raise AtomicOperationError(
+                f"{output_kind} was published but source removal failed"
+            ) from exc
+
     retained = transaction.directory / "source"
     try:
         _publish_noreplace(source_path, retained)
