@@ -491,7 +491,7 @@ def _retire_source(
     *,
     output_kind: str,
 ) -> None:
-    """Move the expected source into private transaction storage before unlinking.
+    """Move the expected source into private temporary sibling storage before unlinking.
 
     The quarantine entry is deliberately inside the journaled transaction
     directory, so an interrupted retirement remains visible to recovery
@@ -499,7 +499,7 @@ def _retire_source(
     """
     if anchor is None:
         # Windows has no Python-level unlink-if-this-file-identity primitive.
-        # First move the entry into the journaled transaction directory. If a
+        # First move the entry into the parent directory under a random sibling name. If a
         # competing process substituted it before the rename, the post-rename
         # identity check detects that and restores the entry without deleting it.
         retained = transaction.retained_path
@@ -523,7 +523,7 @@ def _retire_source(
                 except Exception as restore_error:
                     raise AtomicOperationError(
                         "source identity changed; the unexpected entry remains in transaction storage "
-                        "for explicit recovery inspection"
+                        "for manual inspection"
                     ) from restore_error
                 raise AtomicOperationError(
                     "source identity changed during quarantine; the unexpected entry was restored"
@@ -537,7 +537,7 @@ def _retire_source(
             raise
         except Exception as exc:
             raise AtomicOperationError(
-                "published output remains available; source retirement is incomplete and requires inspection"
+                "published output remains available; source retirement is incomplete and requires manual inspection"
             ) from exc
 
     try:
@@ -734,9 +734,7 @@ class _FileOperations:
                     source_path.parent, "file_decrypt", source_path.name, destination.name, source_info,
                     parent_fd=anchor.fd if anchor is not None else None,
                 )
-                fd = (os.open(transaction.result_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600, dir_fd=transaction.directory_fd)
-                      if transaction.directory_fd is not None else
-                      os.open(transaction.result_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600))
+                fd = transaction.open_result()
                 output = os.fdopen(fd, "wb")
                 _copy_decrypt(
                     material.content,
