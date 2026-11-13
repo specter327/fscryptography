@@ -280,7 +280,6 @@ Las excepciones propias se exportan desde el paquete raíz y derivan de `FsCrypt
 | `BackendError` | Fallo inesperado de integración criptográfica. |
 | `ClosedInstanceError` | Se intentó usar un gestor cerrado. |
 | `AtomicOperationError` | No se pudo asegurar el estado esperado durante la operación. |
-| `RecoveryError` | Falló también la recuperación o rollback. |
 
 Los errores ordinarios del sistema de archivos pueden conservar excepciones estándar como `FileNotFoundError`, `FileExistsError`, `PermissionError` y `OSError`. Los errores de argumentos pueden ser `TypeError` o `ValueError`.
 
