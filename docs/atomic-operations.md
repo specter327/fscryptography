@@ -28,7 +28,7 @@ El plaintext se escribe en temporal privado. No se publica en la ruta definitiva
 - **Recuperación tras interrupción abrupta:** requiere journal/protocolo persistente; no la proporciona un simple temporal.
 - **Durabilidad:** puede requerir flush, fsync del archivo y sincronización de directorio; depende de SO y filesystem.
 
-os.replace() puede reemplazar un destino existente y, por tanto, no satisface por sí solo el contrato de no sobrescritura. Una comprobación previa de existencia seguida de rename tampoco elimina TOCTOU. La implementación debe utilizar una primitiva de publicación no-replace apropiada para cada plataforma/filesystem objetivo; si no puede garantizarla, debe fallar de forma segura. La selección y validación de esas primitivas sigue pendiente.
+os.replace() no se utiliza para publicar porque puede reemplazar un destino existente. En GNU/Linux se utiliza `renameat2(..., RENAME_NOREPLACE)`; si el kernel/filesystem no ofrece la primitiva, la operación falla de forma segura. En Windows se utiliza `os.rename`, cuya semántica no reemplaza un destino existente. No hay fallback a una secuencia check-then-rename. La matriz real NTFS/ext4 todavía requiere validación en los sistemas objetivo.
 
 La atomicidad de una publicación individual no hace indivisible la secuencia completa de publicación del contenido, cambio del nombre y retirada del origen.
 
@@ -40,6 +40,17 @@ Renombrar un directorio dentro del mismo filesystem suele ser atómico como oper
 
 No sobrescribir destinos existentes por defecto. Crear temporales exclusivos y con permisos restrictivos, especialmente para plaintext. Limpiar temporales en errores controlables y definir política para huérfanos.
 
-## Pendiente
+## Estado y límites actuales
 
-Protocolo transaccional de cambios conjuntos, recuperación de temporales huérfanos, permisos/propietario/timestamps, enlaces, concurrencia y garantías específicas por plataforma.
+- [x] Temporales exclusivos en el mismo directorio.
+- [x] Publicación no-replace: `renameat2(RENAME_NOREPLACE)` en GNU/Linux y `os.rename` en Windows.
+- [x] El contenido descifrado permanece en temporal privado hasta completar la autenticación de Tink.
+- [x] El origen solo se elimina después de publicar el destino.
+- [x] Si falla la retirada del origen después de publicar, se conservan ambos recursos y se informa `AtomicOperationError`.
+- [ ] Sincronización del directorio padre y garantías de durabilidad ante pérdida abrupta de energía.
+- [ ] Journal para recuperación transaccional tras interrupción abrupta.
+- [ ] Validación empírica en NTFS y ext4, incluyendo colisiones case-insensitive/case-sensitive.
+- [ ] Pruebas de concurrencia y cambios hostiles de rutas durante la operación.
+- [ ] Política de preservación de permisos, propietario y timestamps.
+
+No se siguen enlaces simbólicos y solo se aceptan archivos regulares/directorios reales. Los enlaces duros, especiales y recursos de red quedan fuera de la matriz v1.
