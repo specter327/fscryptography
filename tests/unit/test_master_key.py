@@ -87,12 +87,12 @@ def test_unsupported_protected_profiles_are_rejected_before_argon2id(monkeypatch
     encoded = generate_master_key(password="profile validation")
     binary = bytearray(base64.b64decode(encoded))
     invalid_fields = (
-        (20, bytes((2,)),                 # KDF identifier
-        (21, bytes((0x12,)),                 # Argon2 version
-        (22, (8192).to_bytes(4, "big"),   # memory cost
-        (26, (2).to_bytes(4, "big"),   # time cost
-        (30, (2).to_bytes(2, "big"),           # parallelism
-        (48, bytes((2,)),                 # wrapping AEAD identifier
+        (20, bytes((2,))),                 # KDF identifier
+        (21, bytes((0x12,))),                 # Argon2 version
+        (22, (8192).to_bytes(4, "big")),   # memory cost
+        (26, (2).to_bytes(4, "big")),   # time cost
+        (30, (2).to_bytes(2, "big")),           # parallelism
+        (48, bytes((2,))),                 # wrapping AEAD identifier
     )
 
     def forbidden_kdf(*args, **kwargs):
