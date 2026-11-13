@@ -189,14 +189,14 @@ def test_encrypt_syncs_destination_before_removing_source(manager, tmp_path, mon
     def sync_parent(parent):
         calls.append((source.exists(), (tmp_path / "durable.fscrypt").exists()))
 
-    monkeypatch.setattr(_filesystem, "_sync_parent_directory", sync_parent)
+    if __import__("sys").platform.startswith("linux"):
+        monkeypatch.setattr(_filesystem.DirectoryAnchor, "sync", lambda anchor: sync_parent(anchor.path))
+        expected_calls = [(True, True), (False, True)]
+    else:
+        monkeypatch.setattr(_filesystem, "_sync_parent_directory", sync_parent)
+        expected_calls = [(True, True), (False, True)]
     manager.file.encrypt(source)
 
-    expected_calls = (
-        [(True, True), (False, True)]
-        if os.name == "nt"
-        else [(True, True), (False, True), (False, True), (False, True)]
-    )
     assert calls == expected_calls
 
 
@@ -207,7 +207,10 @@ def test_encrypt_preserves_source_when_destination_sync_fails(manager, tmp_path,
     def fail_sync(parent):
         raise AtomicOperationError("injected directory sync failure")
 
-    monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_sync)
+    if __import__("sys").platform.startswith("linux"):
+        monkeypatch.setattr(_filesystem.DirectoryAnchor, "sync", lambda anchor: fail_sync(anchor.path))
+    else:
+        monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_sync)
     with pytest.raises(AtomicOperationError):
         manager.file.encrypt(source)
 
@@ -227,8 +230,21 @@ def test_encrypt_reports_sync_failure_after_source_removal(manager, tmp_path, mo
         if calls == failure_call:
             raise AtomicOperationError("injected transaction-directory sync failure")
 
-    monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_after_source_unlink)
-    with pytest.raises(AtomicOperationError, match="source was removed"):
+    if __import__("sys").platform.startswith("linux"):
+        original_set_state = _filesystem.Transaction.set_state
+
+        def fail_after_source_unlink(transaction, state):
+            if state == "source_removed":
+                original_set_state(transaction, state)
+                raise AtomicOperationError("injected failure after source removal")
+            return original_set_state(transaction, state)
+
+        monkeypatch.setattr(_filesystem.Transaction, "set_state", fail_after_source_unlink)
+        expected_message = "retirement is incomplete"
+    else:
+        monkeypatch.setattr(_filesystem, "_sync_parent_directory", fail_after_source_unlink)
+        expected_message = "source was removed"
+    with pytest.raises(AtomicOperationError, match=expected_message):
         manager.file.encrypt(source)
 
     assert not source.exists()
@@ -239,11 +255,18 @@ def test_directory_rename_syncs_parent(manager, tmp_path, monkeypatch):
     directory = tmp_path / "durable-directory"
     directory.mkdir()
     calls = []
-    monkeypatch.setattr(
-        _filesystem,
-        "_sync_parent_directory",
-        lambda parent: calls.append(parent),
-    )
+    if __import__("sys").platform.startswith("linux"):
+        monkeypatch.setattr(
+            _filesystem.DirectoryAnchor,
+            "sync",
+            lambda anchor: calls.append(anchor.path),
+        )
+    else:
+        monkeypatch.setattr(
+            _filesystem,
+            "_sync_parent_directory",
+            lambda parent: calls.append(parent),
+        )
 
     manager.dir.encrypt(directory)
 
