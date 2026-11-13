@@ -45,7 +45,7 @@ Límites estructurales propuestos para v1:
 - Longitud del payload exterior: máximo 128 KiB en modo aleatorio y 128 KiB + 16 bytes en modo protegido (tag GCM incluido).
 - Los límites se comprueban antes de reservar memoria o invocar el parser Protobuf.
 
-El perfil concreto del keyset AEAD de nombres y su compatibilidad multiplataforma siguen pendientes de validación. La estructura del payload no implica que ese backend ya esté seleccionado.
+El keyset de nombres utiliza la primitiva Tink `Aead` con la plantilla `AES256_GCM`, validada mediante prueba ejecutable en Tink 1.16.1 con Python 3.10–3.13. La codificación textual del nombre y las restricciones de longitud/filesystem siguen pendientes; véase [Cifrado de nombres](filename-encryption.md).
 
 ## Propuesta de formato binario v1
 
@@ -184,9 +184,11 @@ Base64 no es cifrado. El modo aleatorio debe protegerse como una credencial secr
 - Límites de entrada y contraseña definidos en [la política de Argon2id](argon2id-policy.md).
 - Perfil Argon2id v1 y rechazo de cualquier parámetro distinto del perfil aprobado antes de ejecutar la KDF.
 
+**Validado para el prototipo:**
+- Perfil AEAD de nombres Tink `AES256_GCM` y keyset `Aead`, con prueba CI en Python 3.10–3.13. La codificación de nombres y el presupuesto de longitud siguen pendientes de aprobación.
+
 **Pendiente antes de implementar la gestión productiva de claves:**
-- Perfil AEAD concreto para nombres y pruebas de compatibilidad del backend.
-- Vectores binarios golden definitivos y pruebas multiplataforma.
+- Vectores binarios golden definitivos y pruebas de integración con keysets Tink reales.
 - Política de versiones y migración más allá de v1.
 
 El layout binario v1.0 está aprobado y cuenta con vectores y pruebas de conformidad estructural. Esto no implica que exista ya un parser productivo ni una implementación funcional de gestión de claves.
