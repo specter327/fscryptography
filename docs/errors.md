@@ -78,7 +78,6 @@ Todas las excepciones propias derivan de `FsCryptographyError`, que deriva de `E
 | Transformación | Identidad/metadatos del origen cambian durante el streaming | `AtomicOperationError` |
 | Retirada del origen | Falla staging, verificación, eliminación o sincronización después de publicar salida | `AtomicOperationError`; la salida puede permanecer publicada y el origen puede requerir inspección |
 | Renombrado de directorio | Conflicto de destino | `DestinationConflictError` |
-| Renombrado de directorio | Conflicto de destino | `DestinationConflictError` |
 | Renombrado de directorio | Error de syscall antes de modificar el namespace (Linux) | Excepción estándar `OSError` |
 | Renombrado de directorio | Identidad cambiada o fallo de rename/restauración en la ruta Windows, o fallo al restaurar tras mover | `InvalidPathError` o `AtomicOperationError`, según si la restauración se confirmó |
 
