@@ -104,6 +104,7 @@ Debe existir al menos una prueba que confirme que el parser productivo rechaza l
 - [x] Ejecutar benchmark repetido del perfil en el equipo de referencia del proyecto.
 - [x] Aprobar Argon2id v19 / 65.536 KiB / 3 / 1 como perfil de producción v1.
 - [x] Confirmar los límites de entrada y contraseña como parte del contrato normativo de MasterKey v1.
-- [ ] Añadir pruebas del parser productivo que verifiquen rechazo previo a KDF y límites de concurrencia/admisión si se implementa.
+- [x] Añadir pruebas del parser productivo que verifiquen el rechazo del perfil no admitido y de contraseñas fuera de límite antes de ejecutar Argon2id.
+- [x] Documentar la responsabilidad de la aplicación integradora sobre la concurrencia de aperturas; la librería no implementa un mecanismo interno de admisión.
 
-El perfil criptográfico y los límites de entrada de MasterKey v1 están aprobados. La implementación productiva está presente. Las pruebas cubren el rechazo temprano del perfil y de contraseñas fuera de límite; siguen pendientes pruebas específicas de carga/concurrencia si el proyecto decide incorporar una política de admisión.
+El perfil criptográfico, los límites de entrada y el orden de validación de MasterKey v1 están implementados y cubiertos por pruebas del parser productivo. La admisión de aperturas concurrentes permanece bajo responsabilidad de la aplicación integradora, conforme a esta política.
