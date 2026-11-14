@@ -63,8 +63,9 @@ Estados permitidos:
 1. `prepared`: journal creado y sincronizado antes de crear/escribir el resultado.
 2. `result_ready`: resultado completo, autenticado cuando aplica, cerrado y sincronizado; su identidad ya está guardada en el journal.
 3. `published`: el resultado se ha publicado en el destino y la entrada de destino se ha sincronizado donde el sistema lo permite.
-4. `source_removed`: el origen se ha retirado y el cambio de namespace se ha sincronizado donde el sistema lo permite.
-5. `complete`: la operación terminó; se puede retirar el directorio transaccional después de persistir el estado.
+4. `source_retained`: el origen se ha movido a la entrada `source` del directorio transaccional y ambas entradas de directorio se han sincronizado donde el sistema lo permite.
+5. `source_removed`: el origen retenido se ha eliminado y la entrada del directorio transaccional se ha sincronizado donde el sistema lo permite.
+6. `complete`: la operación terminó; se conserva el registro como evidencia.
 
 Cada transición se persiste mediante: escribir un journal temporal exclusivo dentro del directorio transaccional, `flush`, `fsync` del archivo, reemplazar atómicamente `journal.json`, y sincronizar el directorio transaccional en GNU/Linux. La escritura parcial nunca debe reemplazar un journal válido.
 
