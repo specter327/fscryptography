@@ -109,7 +109,7 @@ Al finalizar:
 Stop-Transcript
 ```
 
-Publica un resumen sin secretos en la PR #29 con dispositivo/VM, build, NTFS, versiones Python, SHA, conteo de pruebas, skips y fallos. Adjunta logs sanitizados si contienen rutas o información del equipo.
+Publica un resumen sin secretos en la pull request que proponga el cambio o la versión evaluada, o conserva el reporte como artefacto de validación asociado al commit. Incluye dispositivo/VM, build, NTFS, versiones Python, SHA, conteo de pruebas, skips y fallos. Adjunta logs sanitizados si contienen rutas o información del equipo.
 
 ## Resultado actual
 
