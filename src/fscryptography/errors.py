@@ -41,12 +41,9 @@ class BackendError(FsCryptographyError):
 
 
 class ClosedInstanceError(FsCryptographyError):
-    """An operation was attempted on a closed Crypto instance."""
+    """An operation was attempted on a closed Manager instance."""
 
 
 class AtomicOperationError(FsCryptographyError):
-    """An atomic filesystem operation could not be completed safely."""
+    """A filesystem transformation could not complete its expected publication or source-retirement sequence."""
 
-
-class RecoveryError(AtomicOperationError):
-    """Rollback or recovery failed."""

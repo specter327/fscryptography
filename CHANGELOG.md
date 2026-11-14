@@ -6,7 +6,6 @@ Los cambios de API, formatos, compatibilidad y seguridad se registran aquí. Las
 
 ### Added
 - Endurecimiento de concurrencia, transacciones, publicación sin reemplazo y retirada segura del origen.
-- Journal persistente e inspección de recuperación de solo lectura.
 - Validación de metadatos del filesystem, nombres Unicode, límites UTF-16 de Windows, PathLike y rutas largas.
 - Matriz CI con evidencia de ext4 y NTFS, además de validación de dependencias mínimas.
 - Vectores golden del encabezado de archivo y pruebas property-based acotadas.
@@ -16,6 +15,7 @@ Los cambios de API, formatos, compatibilidad y seguridad se registran aquí. Las
 - Cada operación conserva una instantánea coherente de primitivas durante la rotación de Manager.
 - Se documenta que change_key() no re-encripta recursos existentes y que close() no garantiza borrado seguro de memoria.
 - Se precisa el alcance de compatibilidad: Windows Server 2025/NTFS está probado en CI; Windows 11 cliente sigue pendiente.
+- Se eliminan los directorios transaccionales persistentes; los temporales de resultado y staging son entradas hermanas efímeras. No hay recuperación automática tras interrupciones abruptas.
 
 ### Security
 - Se rechazan symlinks, hard links múltiples y reparse points de Windows como recursos fuente.

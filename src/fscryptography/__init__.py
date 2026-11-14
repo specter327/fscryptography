@@ -1,7 +1,6 @@
 """Filesystem-oriented cryptographic operations."""
 
 from .crypto import Manager, generate
-from ._journal import RecoveryRecord
 
 from .errors import (
     AtomicOperationError,
@@ -14,7 +13,6 @@ from .errors import (
     InvalidPathError,
     KeyDerivationError,
     NameConstraintError,
-    RecoveryError,
     UnsupportedFormatVersionError,
     UnsupportedResourceError,
 )
@@ -22,7 +20,6 @@ from .errors import (
 __all__ = [
     "Manager",
     "generate",
-    "RecoveryRecord",
     "AtomicOperationError",
     "AuthenticationError",
     "BackendError",
@@ -33,7 +30,6 @@ __all__ = [
     "InvalidPathError",
     "KeyDerivationError",
     "NameConstraintError",
-    "RecoveryError",
     "UnsupportedFormatVersionError",
     "UnsupportedResourceError",
 ]
