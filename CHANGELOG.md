@@ -23,4 +23,4 @@ Los cambios de API, formatos, compatibilidad y seguridad se registran aquí. Las
 
 ## [0.1.0] — Alpha inicial
 
-Primera versión publicada del paquete fscryptography. Consulta el README y la documentación versionada para el contrato de esa versión.
+Versión alpha inicial del paquete fscryptography. Esta entrada identifica el estado del código y no afirma que se haya publicado en PyPI. Consulta el README y la documentación versionada para el contrato de esa versión.
