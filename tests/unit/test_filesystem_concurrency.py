@@ -7,6 +7,7 @@ from threading import Barrier
 import pytest
 
 import fscryptography
+import fscryptography._filesystem as _filesystem
 
 
 @pytest.fixture
@@ -76,7 +77,7 @@ def test_competing_encryption_of_same_source_never_publishes_multiple_results(
     with ThreadPoolExecutor(max_workers=2) as executor:
         outcomes = list(executor.map(lambda _: encrypt(), range(2)))
 
-    assert sum(outcome is None for outcome in outcomes) == 1
+    assert sum(outcome is None for outcome in outcomes) == 1, outcomes
     assert sum(isinstance(outcome, Exception) for outcome in outcomes) == 1
 
     encrypted = tmp_path / "contended.fscrypt"
@@ -87,12 +88,198 @@ def test_competing_encryption_of_same_source_never_publishes_multiple_results(
     assert source.is_file()
     assert source.read_bytes() == payload
 
-    # Repeated inspection must remain read-only after concurrent operations.
-    before = manager.inspect_recovery(tmp_path)
-    after = manager.inspect_recovery(tmp_path)
-    assert before == after
 
- 
+def test_concurrent_encrypted_names_can_publish_duplicate_results(
+    manager, tmp_path, monkeypatch
+):
+    """Randomized encrypted names allow both results to publish before source retirement."""
+    source = tmp_path / "private-name.txt"
+    payload = b"same source processed concurrently with randomized destination names"
+    source.write_bytes(payload)
+
+    barrier = Barrier(2)
+    copy_encrypt = _filesystem._copy_encrypt
+
+    def synchronize_after_stream(primitive, original, destination, aad):
+        copy_encrypt(primitive, original, destination, aad)
+        barrier.wait(timeout=15)
+
+    monkeypatch.setattr(_filesystem, "_copy_encrypt", synchronize_after_stream)
+
+    def encrypt():
+        try:
+            manager.file.encrypt(source, encrypt_name=True)
+        except Exception as error:
+            return error
+        return None
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(lambda _: encrypt(), range(2)))
+
+    outputs = sorted(
+        path for path in tmp_path.iterdir()
+        if path.is_file() and path.name.startswith("~1")
+    )
+    assert len(outputs) == 2
+    assert sum(outcome is None for outcome in outcomes) == 1, outcomes
+    assert sum(isinstance(outcome, fscryptography.AtomicOperationError) for outcome in outcomes) == 1
+    assert not source.exists()
+
+    # Either published result is independently decryptable. The other remains
+    # as a duplicate ciphertext and is intentionally not auto-cleaned.
+    manager.file.decrypt(outputs[0])
+    assert source.read_bytes() == payload
+    assert outputs[1].is_file()
+
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="descriptor-relative source staging is GNU/Linux-only")
+def test_encrypt_rejects_source_mutation_between_streaming_and_retirement(
+    manager, tmp_path, monkeypatch
+):
+    """A same-inode write after streaming must not cause the changed source to be retired."""
+    source = tmp_path / "late-mutation.bin"
+    original_payload = b"original source bytes"
+    source.write_bytes(original_payload)
+    rename_noreplace = _filesystem.DirectoryAnchor.rename_noreplace
+    mutated = False
+
+    def mutate_before_staging(anchor, source_name, destination_fd, destination_name):
+        nonlocal mutated
+        if source_name == source.name and destination_name.startswith(".fscryptography-source-") and not mutated:
+            source.write_bytes(original_payload + b" changed after streaming")
+            mutated = True
+        return rename_noreplace(anchor, source_name, destination_fd, destination_name)
+
+    monkeypatch.setattr(
+        _filesystem.DirectoryAnchor, "rename_noreplace", mutate_before_staging
+    )
+
+    with pytest.raises(
+        fscryptography.AtomicOperationError, match="source identity changed before retirement"
+    ):
+        manager.file.encrypt(source)
+
+    assert mutated
+    assert source.read_bytes() == original_payload + b" changed after streaming"
+    assert (tmp_path / "late-mutation.fscrypt").is_file()
+    assert not list(tmp_path.glob(".fscryptography-source-*"))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows path-based source staging")
+def test_windows_encrypt_rejects_source_mutation_between_streaming_and_retirement(
+    manager, tmp_path, monkeypatch
+):
+    """A same-inode write after streaming must be restored, not deleted, on Windows."""
+    source = tmp_path / "late-mutation.bin"
+    original_payload = b"original source bytes"
+    source.write_bytes(original_payload)
+    real_rename = os.rename
+    mutated = False
+
+    def mutate_before_staging(src, dst, *args, **kwargs):
+        nonlocal mutated
+        if (
+            not mutated
+            and os.fspath(src) == os.fspath(source)
+            and os.path.basename(os.fspath(dst)).startswith(".fscryptography-source-")
+        ):
+            source.write_bytes(original_payload + b" changed after streaming")
+            mutated = True
+        return real_rename(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(_filesystem.os, "rename", mutate_before_staging)
+
+    with pytest.raises(
+        fscryptography.AtomicOperationError, match="source identity changed during staging"
+    ):
+        manager.file.encrypt(source)
+
+    assert mutated
+    assert source.read_bytes() == original_payload + b" changed after streaming"
+    assert (tmp_path / "late-mutation.fscrypt").is_file()
+    assert not list(tmp_path.glob(".fscryptography-source-*"))
+
+
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="descriptor-relative source staging is GNU/Linux-only")
+def test_decrypt_rejects_ciphertext_mutation_between_streaming_and_retirement(
+    manager, tmp_path, monkeypatch
+):
+    """A ciphertext changed after decryption must not be retired as the consumed source."""
+    source = tmp_path / "late-decrypt-mutation.bin"
+    payload = b"authenticated ciphertext source"
+    source.write_bytes(payload)
+    manager.file.encrypt(source)
+    encrypted = tmp_path / "late-decrypt-mutation.fscrypt"
+    original_ciphertext = encrypted.read_bytes()
+    rename_noreplace = _filesystem.DirectoryAnchor.rename_noreplace
+    mutated = False
+
+    def mutate_before_staging(anchor, source_name, destination_fd, destination_name):
+        nonlocal mutated
+        if source_name == encrypted.name and destination_name.startswith(".fscryptography-source-") and not mutated:
+            with encrypted.open("ab") as stream:
+                stream.write(b" changed after decryption")
+            mutated = True
+        return rename_noreplace(anchor, source_name, destination_fd, destination_name)
+
+    monkeypatch.setattr(
+        _filesystem.DirectoryAnchor, "rename_noreplace", mutate_before_staging
+    )
+
+    with pytest.raises(
+        fscryptography.AtomicOperationError, match="source identity changed before retirement"
+    ):
+        manager.file.decrypt(encrypted)
+
+    assert mutated
+    assert source.read_bytes() == payload
+    assert encrypted.read_bytes() == original_ciphertext + b" changed after decryption"
+    assert not list(tmp_path.glob(".fscryptography-source-*"))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows path-based source staging")
+def test_windows_decrypt_rejects_ciphertext_mutation_between_streaming_and_retirement(
+    manager, tmp_path, monkeypatch
+):
+    """A ciphertext changed after decryption must be restored, not deleted, on Windows."""
+    source = tmp_path / "late-decrypt-mutation.bin"
+    payload = b"authenticated ciphertext source"
+    source.write_bytes(payload)
+    manager.file.encrypt(source)
+    encrypted = tmp_path / "late-decrypt-mutation.fscrypt"
+    original_ciphertext = encrypted.read_bytes()
+    real_rename = os.rename
+    mutated = False
+
+    def mutate_before_staging(src, dst, *args, **kwargs):
+        nonlocal mutated
+        if (
+            not mutated
+            and os.fspath(src) == os.fspath(encrypted)
+            and os.path.basename(os.fspath(dst)).startswith(".fscryptography-source-")
+        ):
+            with encrypted.open("ab") as stream:
+                stream.write(b" changed after decryption")
+            mutated = True
+        return real_rename(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(_filesystem.os, "rename", mutate_before_staging)
+
+    with pytest.raises(
+        fscryptography.AtomicOperationError, match="source identity changed during staging"
+    ):
+        manager.file.decrypt(encrypted)
+
+    assert mutated
+    assert source.read_bytes() == payload
+    assert encrypted.read_bytes() == original_ciphertext + b" changed after decryption"
+    assert not list(tmp_path.glob(".fscryptography-source-*"))
+
+
+
 def test_encrypt_rejects_in_place_source_mutation_during_streaming(
     manager, tmp_path, monkeypatch
 ):
@@ -202,7 +389,7 @@ def test_windows_source_substitution_during_quarantine_is_never_deleted(
     monkeypatch.setattr(os, "rename", substitute_before_quarantine)
 
     with pytest.raises(
-        fscryptography.AtomicOperationError, match="identity changed during quarantine"
+        fscryptography.AtomicOperationError, match="identity changed during staging"
     ):
         manager.file.encrypt(source)
 
@@ -210,17 +397,13 @@ def test_windows_source_substitution_during_quarantine_is_never_deleted(
     assert source.read_bytes() == replacement_payload
     assert displaced.read_bytes() == original_payload
     assert (tmp_path / "windows-quarantine-race.fscrypt").is_file()
-    assert not any(
-        item.name == "source"
-        for transaction_dir in tmp_path.glob(".fscryptography-*")
-        for item in transaction_dir.iterdir()
-    )
+    assert not list(tmp_path.glob(".fscryptography-source-*"))
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows handle-based retirement")
 def test_windows_replacement_after_handle_open_is_not_deleted(
     manager, tmp_path, monkeypatch
 ):
-    """Replacing the quarantine path after handle validation cannot redirect deletion."""
+    """Replacing the temporary staging path after handle validation cannot redirect deletion."""
     source = tmp_path / "windows-handle-race.bin"
     source.write_bytes(b"expected source object")
     real_mark = fscryptography._filesystem._windows_mark_handle_for_deletion
@@ -230,12 +413,7 @@ def test_windows_replacement_after_handle_open_is_not_deleted(
     quarantine_paths = []
 
     def replace_quarantine_then_delete(handle):
-        transaction_dirs = list(tmp_path.glob(".fscryptography-*"))
-        retained = next(
-            entry / "source"
-            for entry in transaction_dirs
-            if (entry / "source").exists()
-        )
+        retained = next(tmp_path.glob(".fscryptography-source-*"))
         quarantine_paths.append(retained)
         real_rename(retained, moved)
         retained.write_bytes(replacement_payload)
@@ -255,3 +433,199 @@ def test_windows_replacement_after_handle_open_is_not_deleted(
     assert not source.exists()
     assert (tmp_path / "windows-handle-race.fscrypt").is_file()
 
+
+
+def test_encryption_uses_one_key_snapshot_during_concurrent_rotation(
+    tmp_path, monkeypatch
+):
+    first_key = fscryptography.generate()
+    second_key = fscryptography.generate()
+    manager = fscryptography.Manager(first_key)
+    source = tmp_path / "key-snapshot.txt"
+    payload = b"one operation must not mix two manager key generations"
+    source.write_bytes(payload)
+    original_encrypt_name = fscryptography._filesystem.encrypt_name_fn
+
+    def rotate_after_name_encryption(name, primitive, profile, limit):
+        encrypted_name = original_encrypt_name(name, primitive, profile, limit)
+        manager.change_key(second_key)
+        return encrypted_name
+
+    monkeypatch.setattr(
+        fscryptography._filesystem, "encrypt_name_fn", rotate_after_name_encryption
+    )
+    try:
+        manager.file.encrypt(source, encrypt_name=True)
+        assert manager.export_key() == second_key
+
+        encrypted = next(
+            path for path in tmp_path.iterdir()
+            if path.is_file() and path.name.startswith("~1")
+        )
+        with fscryptography.Manager(first_key) as original_context:
+            original_context.file.decrypt(encrypted)
+        assert source.read_bytes() == payload
+    finally:
+        manager.close()
+
+
+def test_in_flight_operation_completes_with_snapshot_after_manager_close(
+    tmp_path, monkeypatch
+):
+    key = fscryptography.generate()
+    manager = fscryptography.Manager(key)
+    source = tmp_path / "close-snapshot.txt"
+    payload = b"close prevents future operations, not an operation already started"
+    source.write_bytes(payload)
+    original_encrypt_name = fscryptography._filesystem.encrypt_name_fn
+
+    def close_after_name_encryption(name, primitive, profile, limit):
+        encrypted_name = original_encrypt_name(name, primitive, profile, limit)
+        manager.close()
+        return encrypted_name
+
+    monkeypatch.setattr(
+        fscryptography._filesystem, "encrypt_name_fn", close_after_name_encryption
+    )
+    manager.file.encrypt(source, encrypt_name=True)
+
+    with pytest.raises(fscryptography.ClosedInstanceError):
+        manager.export_key()
+
+    encrypted = next(
+        path for path in tmp_path.iterdir()
+        if path.is_file() and path.name.startswith("~1")
+    )
+    with fscryptography.Manager(key) as original_context:
+        original_context.file.decrypt(encrypted)
+    assert source.read_bytes() == payload
+
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows file-sharing semantics")
+def test_windows_source_handle_allows_staging_while_reader_is_open(tmp_path):
+    source = tmp_path / "share-delete.bin"
+    source.write_bytes(b"source remains readable through the open handle")
+    expected = _filesystem._check_source(source, directory=False)
+    retained = tmp_path / ".fscryptography-source-test"
+
+    with _filesystem._open_source(source, expected) as reader:
+        os.rename(source, retained)
+        assert reader.read() == b"source remains readable through the open handle"
+
+    assert retained.read_bytes() == b"source remains readable through the open handle"
+    assert not source.exists()
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="descriptor-relative source retirement is GNU/Linux-only")
+def test_linux_source_retirement_unlink_is_not_conditional_on_checked_inode(
+    manager, tmp_path, monkeypatch
+):
+    """Expose the documented stat/unlink race for hostile same-directory actors."""
+    source = tmp_path / "retirement-race.bin"
+    original_payload = b"the object whose identity was checked"
+    replacement_payload = b"same-directory replacement"
+    source.write_bytes(original_payload)
+
+    displaced = tmp_path / "displaced-original.bin"
+    real_unlink_retained = _filesystem.Transaction.unlink_retained
+    substituted = False
+
+    def substitute_after_identity_check(transaction):
+        nonlocal substituted
+        retained = transaction.parent / transaction.retained_name
+        # _retire_source has already stat'ed and accepted this retained entry.
+        os.rename(retained, displaced)
+        retained.write_bytes(replacement_payload)
+        substituted = True
+        return real_unlink_retained(transaction)
+
+    monkeypatch.setattr(
+        _filesystem.Transaction, "unlink_retained", substitute_after_identity_check
+    )
+
+    manager.file.encrypt(source)
+
+    assert substituted
+    assert displaced.read_bytes() == original_payload
+    assert not list(tmp_path.glob(".fscryptography-source-*"))
+    assert not source.exists()
+    assert (tmp_path / "retirement-race.fscrypt").is_file()
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="directory descriptor anchoring is GNU/Linux-only")
+def test_encrypt_rejects_replaced_parent_before_publishing(manager, tmp_path, monkeypatch):
+    """A parent pathname replaced during streaming must not receive a result."""
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    source = parent / "payload.bin"
+    payload = b"parent replacement must not redirect publication"
+    source.write_bytes(payload)
+    displaced = tmp_path / "displaced-parent"
+    real_copy_encrypt = _filesystem._copy_encrypt
+    replaced = False
+
+    def replace_parent_after_stream(primitive, original, destination, aad):
+        nonlocal replaced
+        real_copy_encrypt(primitive, original, destination, aad)
+        os.rename(parent, displaced)
+        parent.mkdir()
+        replaced = True
+
+    monkeypatch.setattr(_filesystem, "_copy_encrypt", replace_parent_after_stream)
+    with pytest.raises(fscryptography.InvalidPathError, match="parent directory"):
+        manager.file.encrypt(source)
+    assert replaced
+    assert (displaced / "payload.bin").read_bytes() == payload
+    assert not list(displaced.glob("*.fscrypt"))
+    assert list(parent.iterdir()) == []
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="directory descriptor anchoring is GNU/Linux-only")
+def test_encrypt_preserves_source_if_parent_is_replaced_after_publication(manager, tmp_path, monkeypatch):
+    """A parent replacement between publication and retirement must preserve the source."""
+    parent = tmp_path / "parent-after-publish"
+    parent.mkdir()
+    source = parent / "payload.bin"
+    payload = b"published result must not trigger source retirement in a detached parent"
+    source.write_bytes(payload)
+    displaced = tmp_path / "displaced-parent-after-publish"
+    rename_result = _filesystem.Transaction.rename_result_to
+    replaced = False
+
+    def publish_then_replace(transaction, parent_fd, destination_name):
+        nonlocal replaced
+        rename_result(transaction, parent_fd, destination_name)
+        os.rename(parent, displaced)
+        parent.mkdir()
+        replaced = True
+
+    monkeypatch.setattr(_filesystem.Transaction, "rename_result_to", publish_then_replace)
+    with pytest.raises(fscryptography.InvalidPathError, match="parent directory"):
+        manager.file.encrypt(source)
+    assert replaced
+    assert (displaced / "payload.bin").read_bytes() == payload
+    assert (displaced / "payload.fscrypt").is_file()
+    assert list(parent.iterdir()) == []
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="directory descriptor anchoring is GNU/Linux-only")
+def test_directory_rename_rejects_replaced_parent_path(manager, tmp_path, monkeypatch):
+    """Directory-name transformations validate the parent pathname before rename."""
+    parent = tmp_path / "directory-parent"
+    parent.mkdir()
+    source = parent / "folder"
+    source.mkdir()
+    displaced = tmp_path / "displaced-directory-parent"
+    real_encrypt_name = _filesystem.encrypt_name_fn
+
+    def replace_parent_before_rename(name, primitive, profile, limit):
+        result = real_encrypt_name(name, primitive, profile, limit)
+        os.rename(parent, displaced)
+        parent.mkdir()
+        return result
+
+    monkeypatch.setattr(_filesystem, "encrypt_name_fn", replace_parent_before_rename)
+    with pytest.raises(fscryptography.InvalidPathError, match="parent directory"):
+        manager.dir.encrypt(source)
+    assert (displaced / "folder").is_dir()
+    assert list(parent.iterdir()) == []

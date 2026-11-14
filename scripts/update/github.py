@@ -62,7 +62,7 @@ def main() -> int:
         )
         return 2
 
-    status = git(repository, "status", "--porcelain")
+    status = git(repository, "status", "--porcelain", "--untracked-files=normal")
     if status.returncode != 0:
         print(status.stderr, file=sys.stderr)
         return status.returncode

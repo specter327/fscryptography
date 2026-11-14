@@ -82,9 +82,23 @@ class DirectoryAnchor:
         os.fsync(self.fd)
 
     def verify_path_still_names_anchor(self) -> None:
-        """Reject a replaced parent pathname while retaining the original anchor."""
-        current = os.stat(self.path, follow_symlinks=False)
-        if stat.S_ISLNK(current.st_mode) or (current.st_dev, current.st_ino) != (self.info.st_dev, self.info.st_ino):
+        """Reject a missing, replaced, or symlinked parent pathname.
+
+        The check detects persistent namespace changes; it cannot make a
+        pathname check atomic with a subsequent filesystem operation.
+        Descriptor-relative operations remain anchored to this directory
+        even if its pathname is concurrently changed.
+        """
+        try:
+            current = os.stat(self.path, follow_symlinks=False)
+        except OSError as exc:
+            raise InvalidPathError(
+                "parent directory pathname no longer resolves to the anchored directory"
+            ) from exc
+        if (
+            stat.S_ISLNK(current.st_mode)
+            or (current.st_dev, current.st_ino) != (self.info.st_dev, self.info.st_ino)
+        ):
             raise InvalidPathError("parent directory was replaced during the operation")
 
     def close(self) -> None:

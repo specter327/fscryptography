@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import struct
+from pathlib import Path
 
 import pytest
 
@@ -145,5 +147,57 @@ def test_empty_output_extension_is_preserved():
 def test_original_extension_flag_must_match_length():
     header = bytearray(build_header(original_extension=".txt", output_extension=".fscrypt"))
     header[10:12] = struct.pack(">H", 0)
+    with pytest.raises(FormatError):
+        parse_header(bytes(header))
+
+
+
+def test_v1_header_golden_vectors():
+    fixture_path = Path(__file__).parent / "fixtures" / "file_header_v1_vectors.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    for vector in fixture["vectors"]:
+        fields = vector["fields"]
+        header = build_header(
+            original_extension=fields["original_extension"],
+            output_extension=fields["output_extension"],
+            encrypted_name=fields["encrypted_name"],
+        )
+        assert header.hex() == vector["header_hex"], vector["id"]
+        parsed = parse_header(header)
+        assert parsed.original_extension == fields["original_extension"]
+        assert parsed.output_extension == fields["expected_output_extension"]
+        assert parsed.encrypted_name is fields["encrypted_name"]
+
+
+def test_v1_header_parser_rejects_every_truncated_golden_header():
+    header = bytes.fromhex(
+        "4653435246494c000100000100000020000400082e7478742e66736372797074"
+    )
+    for end in range(len(header)):
+        with pytest.raises(FormatError):
+            parse_header(header[:end])
+
+
+def test_v1_header_parser_rejects_trailing_bytes():
+    header = build_header(original_extension=".txt", output_extension=".fscrypt")
+    with pytest.raises(FormatError, match="length"):
+        parse_header(header + b"\x00")
+
+
+def test_v1_header_parser_rejects_each_reserved_flag_bit():
+    header = build_header(original_extension=None, output_extension=".fscrypt")
+    for bit in range(2, 16):
+        mutated = bytearray(header)
+        flags = struct.unpack_from(">H", mutated, 10)[0] | (1 << bit)
+        mutated[10:12] = struct.pack(">H", flags)
+        with pytest.raises(FormatError, match="reserved flags"):
+            parse_header(bytes(mutated))
+
+
+@pytest.mark.parametrize("length_offset", [16, 18])
+def test_v1_header_parser_rejects_oversized_metadata_lengths(length_offset):
+    header = bytearray(build_header(original_extension=".txt", output_extension=".fscrypt"))
+    header[length_offset:length_offset + 2] = struct.pack(">H", 0xFFFF)
     with pytest.raises(FormatError):
         parse_header(bytes(header))

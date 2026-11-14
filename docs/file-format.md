@@ -150,7 +150,8 @@ No se devuelve contenido parcial como válido. No se intenta recuperación heur�
 - [x] Definir el modo de nombre cifrado sin extensiones visibles.
 - [x] Implementar serialización y parser estricto de la cabecera v1.0.
 - [x] Añadir pruebas unitarias iniciales del parser y de las reglas de extensión.
-- [ ] Añadir vectores golden binarios versionados y pruebas de mutación/fuzzing.
-- [ ] Implementar cifrado/descifrado de contenido con Tink Streaming AEAD.
-- [ ] Implementar operaciones de filesystem y publicación no-replace por plataforma.
-- [ ] Validar atomicidad, rollback y round-trip sobre NTFS/ext4 reales.
+- [x] Añadir vectores golden binarios v1.0 versionados y pruebas deterministas de truncamiento, flags reservados, longitudes y bytes sobrantes.
+- [x] Implementar cifrado/descifrado de contenido con Tink Streaming AEAD.
+- [x] Implementar operaciones de filesystem y publicación no-replace en GNU/Linux y Windows.
+- [x] Validar round-trip y colisiones sobre ext4 (Ubuntu 22.04/24.04) y NTFS (Windows Server 2025) en CI.
+- [ ] Validar específicamente en Windows 11 cliente y ampliar pruebas de mutación con fuzzing/property-based.

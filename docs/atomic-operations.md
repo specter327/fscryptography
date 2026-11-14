@@ -1,119 +1,76 @@
-# Operaciones atómicas y recuperación
+# Operaciones transaccionales y límites ante interrupciones
 
 ## Objetivo
 
-Un fallo no debe destruir el original ni publicar contenido parcial como resultado válido. Las operaciones de archivo utilizan temporales exclusivos dentro de directorios transaccionales, completan la transformación antes de publicar y nunca reemplazan un destino existente.
+Las operaciones evitan publicar resultados parciales, no reemplazan destinos existentes y no retiran el origen hasta que el resultado completo se ha publicado. El estado transaccional se conserva únicamente en memoria; no existe journal persistente ni recuperación posterior.
 
-## Secuencia de archivo actualmente implementada
+## Secuencia de archivo
 
-Tanto cifrado como descifrado siguen esta secuencia:
+Cifrado y descifrado siguen este orden:
 
-1. Validar el origen y registrar su identidad inicial (dispositivo/inodo cuando el sistema lo proporciona).
-2. Crear el directorio transaccional y persistir el estado `prepared`.
-3. Crear un temporal exclusivo dentro de la transacción.
-4. Escribir el resultado completo; en descifrado, autenticar todos los segmentos y el cierre del flujo antes de publicar.
-5. Ejecutar `flush` y `fsync` sobre el resultado y persistir `result_ready`.
-6. Publicar con una primitiva atómica no-replace.
-7. En GNU/Linux, sincronizar el directorio padre con `fsync` para persistir la entrada de destino.
-8. Persistir `published`, revalidar la identidad del origen y retirarlo únicamente si coincide.
-9. En GNU/Linux, sincronizar el directorio padre y persistir `source_removed` y `complete`.
+1. Validar el origen y capturar su identidad inicial.
+2. Crear un nombre temporal aleatorio y exclusivo en el directorio padre.
+3. Procesar el archivo en streaming. En descifrado, autenticar el flujo completo antes de publicar.
+4. Sincronizar el archivo temporal con `fsync`.
+5. Publicar mediante una primitiva atómica no-replace.
+6. Sincronizar el directorio padre en GNU/Linux.
+7. Mover el origen a un nombre hermano aleatorio mediante rename no-replace.
+8. Verificar la identidad del objeto movido. Si no coincide, intentar restaurarlo sin sobrescribir una entrada competidora.
+9. Retirar el objeto verificado. En Windows, la eliminación se solicita sobre el handle cuya identidad ya fue comprobada.
+10. Sincronizar el directorio padre en GNU/Linux.
 
-El orden es deliberado: no se elimina el origen hasta haber publicado el destino. Si falla una transición del journal, no se debe continuar con una mutación posterior. Los recursos ya publicados permanecen para inspección; no hay rollback destructivo automático.
+El estado lógico (`prepared`, `result_ready`, `published`, `source_retained`, `source_removed`, `complete`) vive solo en el objeto transaccional en memoria. No se serializa.
+
+## Temporales hermanos
+
+Los resultados temporales se crean en el mismo directorio padre para conservar el procesamiento streaming y permitir publicación dentro del mismo filesystem. La retirada del origen utiliza temporalmente otro nombre hermano aleatorio, necesario para verificar el objeto después del rename antes de solicitar su eliminación.
+
+En ejecución normal, los temporales de resultado se eliminan durante la limpieza si no fueron publicados. Un temporal de origen que contenga un objeto inesperado o cuya eliminación haya fallado puede permanecer deliberadamente para evitar borrar un recurso no verificado.
+
+## Interrupción abrupta y ausencia de recuperación
+
+Una terminación abrupta del proceso, un cierre forzado o una pérdida de energía puede dejar:
+
+- Un temporal de resultado completo o incompleto.
+- Un origen movido a un nombre temporal hermano durante la retirada.
+- El origen y el destino publicados simultáneamente, si la interrupción ocurrió después de publicar y antes de retirar el origen.
+
+La librería no crea journals, directorios de transacción, registros persistentes ni identificadores consultables. No ofrece `inspect_recovery()`, `RecoveryRecord`, recuperación automática, rollback ni limpieza automática en una ejecución posterior. No puede distinguir de forma fiable un temporal propio antiguo de un archivo ajeno con un nombre parecido.
+
+El consumidor debe inspeccionar manualmente el directorio y decidir qué conservar. Antes de borrar o restaurar un elemento, debe verificar su identidad y contenido. No debe asumir que un archivo con prefijo `.fscryptography-` pertenece necesariamente a una operación interrumpida.
+
+Por tanto, la ausencia de journal reduce la persistencia auxiliar, pero renuncia explícitamente a la recuperación post-crash. No se garantiza ausencia absoluta de residuos tras apagones.
 
 ## Publicación y no sobrescritura
 
-`os.replace()` no se utiliza para publicar recursos del usuario porque puede reemplazar un destino existente. En GNU/Linux se utiliza `renameat2(..., RENAME_NOREPLACE)`; si el kernel/filesystem no ofrece la primitiva, la operación falla de forma segura. En Windows se utiliza `os.rename`, cuya semántica no reemplaza un destino existente. No hay fallback a una secuencia check-then-rename.
-
-El renombrado de directorios también usa publicación no-replace y sincroniza el directorio padre en GNU/Linux. La operación solo cambia el nombre del directorio; no recorre ni modifica sus hijos.
+En GNU/Linux se utiliza `renameat2(RENAME_NOREPLACE)`; si la primitiva no está disponible, la operación falla de forma segura. En Windows se utiliza `os.rename`, que no reemplaza un destino existente. No se usa una secuencia check-then-rename como sustituto.
 
 ## Durabilidad por plataforma
 
-- **GNU/Linux:** el archivo temporal se sincroniza antes de publicación y el directorio padre se sincroniza después de publicar y después de retirar el origen. Esto mejora la durabilidad de las entradas de directorio, pero las garantías finales dependen del kernel, filesystem, dispositivo y opciones de montaje.
-- **Windows:** el archivo temporal se sincroniza y el cambio de nombre usa `os.rename`; la implementación actual no realiza un flush verificable del directorio padre. Por tanto, no promete durabilidad del cambio de nombre ante pérdida abrupta de energía.
+- **GNU/Linux:** el resultado se sincroniza antes de publicación y el directorio padre se sincroniza después de publicar y retirar el origen. Las garantías finales dependen del kernel, filesystem, dispositivo y opciones de montaje.
+- **Windows:** el archivo temporal se sincroniza y los cambios de nombre usan `os.rename`; no se promete durabilidad del cambio de nombre ante pérdida de energía porque no se realiza un flush verificable del directorio padre.
 - **Otros sistemas:** no están soportados por la implementación actual.
 
-La matriz real NTFS/ext4 y las garantías ante cortes eléctricos todavía requieren validación empírica en los sistemas objetivo.
+## Seguridad y concurrencia
 
-## Journal persistente y recuperación
+En GNU/Linux, antes de publicar el resultado y antes de retirar el origen, la librería vuelve a comprobar que la ruta del directorio padre sigue identificando al descriptor anclado. Las transformaciones de nombre de directorio realizan la misma comprobación antes del rename. Si detecta que el padre fue movido, sustituido, eliminado o reemplazado por un enlace simbólico, aborta la fase aún no ejecutada. Si la sustitución ocurre después de publicar y antes de retirar el origen, conserva el origen; el resultado ya publicado permanece en el directorio anclado, que puede haber sido movido fuera de su ruta original. Estas verificaciones detectan cambios persistentes, pero no son atómicas respecto de la siguiente operación: no impiden una carrera entre la comprobación de la ruta y renameat2. Los descriptores siguen anclando las operaciones al directorio original, no a la ruta visible.
 
-El journal persistente v1 está implementado. Cada operación conserva un registro estricto con identidades de filesystem y estados persistidos. `Manager.inspect_recovery(parent)` ofrece inspección explícita, idempotente y de solo lectura.
+La identidad del origen se valida antes y después del streaming. Antes de retirarlo, se mueve a un nombre hermano y se vuelve a comprobar identidad, número de enlaces, tamaño y mtime; así se detectan también escrituras ordinarias ocurridas entre el final del streaming y el staging. ctime se compara durante el streaming, pero no después del rename porque el propio cambio de nombre puede actualizarlo. Estas comprobaciones no constituyen una instantánea criptográfica ni protegen frente a un escritor hostil que pueda manipular metadatos o competir dentro de la granularidad temporal del filesystem.
 
-No existe recuperación automática ni resolución destructiva de transacciones interrumpidas. Los temporales huérfanos no se eliminan automáticamente. Consulta [Journal persistente y protocolo de recuperación](recovery-journal.md) para el esquema, las clasificaciones y las garantías.
+La retirada del origen en GNU/Linux tiene un límite distinto y relevante: después de moverlo al nombre hermano y verificar su identidad mediante `stat`, la librería ejecuta `unlink` por nombre relativo al descriptor del directorio. La comprobación y la eliminación no son atómicas. Un proceso con permisos equivalentes sobre ese directorio puede sustituir la entrada retenida entre ambas llamadas y hacer que `unlink` elimine el sustituto. El descriptor ancla el directorio, pero no condiciona la eliminación al inode previamente verificado. La secuencia detecta sustituciones anteriores a la comprobación; no protege frente a una sustitución concurrente en esa ventana. Este comportamiento queda fuera del modelo de aislamiento de la librería y no debe interpretarse como eliminación segura frente a actores hostiles con permisos equivalentes. En Windows se solicita la eliminación sobre el handle abierto y verificado, por lo que este límite específico de `unlink` por nombre no describe esa ruta.
 
-## Pruebas de concurrencia y modificación de recursos
+La limpieza de un temporal de resultado compara primero `(st_dev, st_ino)` con la identidad capturada al crearlo y solo intenta eliminarlo si coincide. Esta comprobación evita eliminar reemplazos que ya existían al momento de inspeccionar la entrada, pero la comparación y `unlink()` no son una operación atómica: un proceso con permisos equivalentes sobre el directorio puede sustituir el nombre entre ambas llamadas. Por tanto, la limpieza es de mejor esfuerzo y no constituye una defensa frente a procesos hostiles que puedan modificar el mismo directorio. Este límite también aplica al uso de un descriptor del directorio (`dir_fd`): ancla la resolución al directorio, pero no hace condicional el `unlink` respecto al inode verificado.
 
-La suite `tests/unit/test_filesystem_concurrency.py` añade:
+La publicación no-replace impide sobrescribir destinos existentes. Cuando se usa un destino determinista (por ejemplo, la extensión predeterminada), las operaciones concurrentes sobre el mismo origen compiten por el mismo nombre y solo una puede publicarlo. Con `encrypt_name=True`, cada operación genera un nombre cifrado aleatorio distinto: dos operaciones concurrentes pueden publicar dos ciphertexts válidos antes de competir por retirar el origen. Solo una puede completar esa retirada; la otra puede fallar y dejar su resultado publicado como duplicado. La librería no elimina automáticamente ese segundo resultado porque ya fue publicado y no puede asumir que sea prescindible. El consumidor debe revisar los resultados antes de retirar duplicados. Los temporales usan nombres aleatorios y creación exclusiva, pero no se consideran un mecanismo de aislamiento frente a procesos hostiles con permisos equivalentes.
 
-- Ocho operaciones concurrentes de cifrado/descifrado sobre recursos independientes mediante una misma instancia de `Manager`.
-- Dos operaciones simultáneas que compiten por cifrar el mismo origen; debe existir exactamente un ganador, un único resultado publicable y un round-trip íntegro.
-- Inspección repetida del journal después de la contención para comprobar que sigue siendo de solo lectura.
-- Modificación in-place del archivo origen durante cifrado y del ciphertext durante descifrado: la operación compara identidad, tamaño, `mtime` y `ctime` del descriptor antes de publicar y aborta si detecta cambios.
-- Sustitución determinista del origen durante la retirada y sustitución del directorio padre durante la operación, cubiertas por pruebas GNU/Linux existentes en `tests/unit/test_filesystem.py`.
-- Sustitución determinista de un directorio durante su renombrado, también cubierta en GNU/Linux.
+## Límites y pruebas
 
-La detección de modificación compara metadatos observables del descriptor; **no es una instantánea criptográfica del origen ni protege frente a un escritor hostil que pueda manipular metadatos, explotar la granularidad temporal del filesystem o modificar bytes y restaurarlos antes de la comprobación**. En Windows, la retirada mueve primero el origen a la entrada `source` del directorio transaccional, verifica su identidad después del movimiento y solicita el borrado mediante `SetFileInformationByHandle` sobre un handle abierto con `DELETE`. Si una entrada sustituta es movida por la carrera previa al renombrado, la identidad posterior no coincide y se intenta restaurar sin sobrescribir una entrada competidora. La eliminación afecta al objeto del handle ya verificado, no a una ruta que pueda resolverse de nuevo. El directorio transaccional conserva la ACL heredada del padre: esto cierra la carrera de sustitución de la ruta que podría provocar el borrado de un objeto distinto, pero no aísla el journal frente a otro proceso con permisos equivalentes para manipular ese directorio. La publicación GNU/Linux usa `renameat2(RENAME_NOREPLACE)` y ahora tiene una prueba determinista que crea un destino competidor justo antes del renombrado; el destino concurrente y el origen deben permanecer intactos. La prueba no sustituye la validación empírica en todos los filesystems.
+La suite unitaria cubre round-trip, autenticación, colisiones de destino, modificación del origen durante streaming, sustitución de entradas durante la retirada, publicación no-replace y concurrencia. Las pruebas no equivalen a una simulación de pérdida de energía ni a una auditoría de filesystem.
 
-## Estados tras interrupción
+Pendiente de validación ampliada:
 
-| Punto de interrupción | Estado esperado |
-|---|---|
-| Antes de publicar | El origen permanece; puede quedar un resultado temporal dentro de la transacción |
-| Después de publicar y antes de retirar el origen | Origen y destino completos pueden coexistir |
-| Después de retirar el origen | El destino es el único recurso visible; su persistencia depende de las garantías de sincronización de la plataforma |
-
-Si origen y destino coexisten, no se debe eliminar ninguno sin verificar su identidad y contenido. La inspección no muta el filesystem.
-
-## Límites actuales
-
-- [x] Temporales exclusivos dentro de directorios transaccionales.
-- [x] Publicación no-replace: `renameat2(RENAME_NOREPLACE)` en GNU/Linux y `os.rename` en Windows.
-- [x] El plaintext permanece en temporal privado hasta completar la autenticación de Tink.
-- [x] El origen solo se elimina después de publicar el destino.
-- [x] Identidad del origen revalidada antes de retirarlo.
-- [x] Journal persistente e inspección explícita de solo lectura.
-- [x] Pruebas de concurrencia entre operaciones independientes y contención sobre un mismo origen.
-- [x] Detección de cambios ordinarios de identidad/tamaño/mtime/ctime del descriptor durante streaming, en cifrado y descifrado.
-- [x] Pruebas deterministas GNU/Linux de sustitución del padre, origen y directorio durante la operación.
-- [ ] Garantía frente a escritores hostiles capaces de manipular/restaurar metadatos o competir dentro de su granularidad.
-- [x] Retirada Windows mediante cuarentena transaccional, verificación de identidad por handle y disposición de borrado sobre ese mismo handle; sin afirmación de ACL privada ni aislamiento frente a procesos con permisos equivalentes.
-- [x] Prueba GNU/Linux de colisión de destino justo en el punto de publicación.
-- [x] Terminación abrupta del proceso antes y después de persistir `prepared`, `result_ready`, `published`, `source_retained`, `source_removed` y `complete`, mediante subprocess y `os._exit` en GNU/Linux.
-- [ ] Flush verificable de directorio y garantías de durabilidad en Windows.
-- [ ] Validación empírica en NTFS y ext4, incluidas colisiones case-insensitive/case-sensitive.
-- [ ] Política de preservación de permisos, propietario y timestamps.
-
-No se siguen enlaces simbólicos y solo se aceptan archivos regulares/directorios reales. Los enlaces duros, especiales y recursos de red quedan fuera de la matriz v1.
-
-Las pruebas `test_windows_source_substitution_during_quarantine_is_never_deleted` y `test_windows_replacement_after_handle_open_is_not_deleted` fuerzan, respectivamente, una sustitución antes del movimiento a cuarentena y otra después de abrir/verificar el handle. Comprueban que el objeto sustituto no se elimina y que la disposición de borrado sigue ligada al handle del objeto esperado. Las pruebas de round-trip de Windows ejercitan la eliminación normal por handle. La durabilidad de las entradas de directorio en Windows sigue sin estar garantizada por `fsync` de directorio.
-
-
-## Terminación abrupta del proceso
-
-La prueba de integración `tests/real_resources/test_crash_recovery.py` ejecuta la operación en un proceso hijo y fuerza `os._exit` desde la persistencia del journal. Esto evita que se ejecuten bloques `finally`, destructores o limpieza normal. Para cada estado `prepared`, `result_ready`, `published`, `source_retained`, `source_removed` y `complete`, se interrumpe tanto antes como después de escribir el nuevo registro.
-
-La prueba comprueba el estado visible del origen y destino, la clasificación que devuelve `inspect_recovery()`, la repetibilidad de la inspección y que el journal y el directorio transaccional no sean modificados por ella. En particular, contempla la diferencia entre el estado físico y el último estado durable del journal: por ejemplo, el destino puede estar publicado mientras el registro aún dice `result_ready`, o el origen puede haberse retirado mientras el registro todavía dice `source_retained`.
-
-Esta prueba verifica terminación abrupta del proceso en GNU/Linux. No simula pérdida de energía, fallo del kernel, caché del dispositivo ni garantiza durabilidad física del hardware. Windows aún requiere una matriz equivalente de interrupciones y validación específica de su semántica de persistencia.
-
-
-## Enlaces duros y contrato de metadatos (fase de endurecimiento)
-
-Las operaciones de archivo rechazan recursos regulares cuyo contador de enlaces (`st_nlink`) sea distinto de uno. Cifrar una sola entrada de un inode con varios hard links no protegería el contenido: las demás entradas seguirían exponiendo el mismo plaintext. La condición se valida al inspeccionar y abrir el origen, se incluye en la detección de cambios observables durante el streaming y se vuelve a comprobar después de mover el origen a cuarentena, antes de retirarlo.
-
-Esta protección cubre hard links preexistentes y cambios ordinarios observables durante la operación. No constituye una defensa completa frente a un proceso hostil con permisos equivalentes que cree enlaces concurrentemente o manipule el filesystem entre comprobaciones. Los enlaces simbólicos siguen rechazándose. No se recorren directorios, no se siguen junctions/reparse points como recursos fuente y los enlaces duros no se procesan como árboles de alias.
-
-### Metadatos de archivos
-
-El contrato actual preserva el **contenido autenticado** y el nombre lógico codificado en el formato, no los metadatos del archivo original. Los resultados de archivo se crean como recursos nuevos:
-
-- En GNU/Linux, los resultados y journals usan modo `0600`, y los directorios transaccionales modo `0700`; los resultados no heredan el modo POSIX del origen.
-- No se promete preservar propietario, grupo, ACL, bits especiales, timestamps, flags, xattrs, etiquetas de seguridad ni atributos extendidos.
-- En Windows, el resultado recibe la ACL y los atributos aplicables al nuevo archivo y al directorio donde se crea; no se promete copiar ACL, propietario, timestamps, atributos DOS ni alternate data streams del origen.
-- El renombrado de un directorio cambia únicamente su nombre de entrada: no recorre su contenido ni reconstruye sus metadatos.
-
-Esta distinción es intencional: copiar metadatos de seguridad sin una política explícita puede ampliar permisos o transferir etiquetas/ACL incompatibles al plaintext o ciphertext. La preservación selectiva de metadatos queda fuera del contrato actual y requerirá una decisión de diseño y pruebas específicas por plataforma antes de incorporarse.
-
-
-## Windows reparse points
-
-En Windows, la validación inicial rechaza entradas marcadas con FILE_ATTRIBUTE_REPARSE_POINT, además de los enlaces simbólicos reconocidos por Python. Esto incluye junctions y otros tipos de reparse point: no se aceptan como archivo o directorio fuente. Durante la retirada de archivos, la entrada en cuarentena vuelve a comprobarse para evitar eliminar un objeto que haya sido sustituido por un reparse point. La prueba de integración crea una junction real cuando el runner lo permite y verifica que el destino referenciado permanece intacto.
+- Fallos de kernel, caché de dispositivo y pérdida física de energía.
+- Durabilidad de entradas de directorio en Windows.
+- Comportamiento en todos los filesystems y configuraciones de montaje objetivo.
+- Ataques de procesos hostiles con permisos equivalentes.
+- Política de metadatos de archivos y directorios.

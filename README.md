@@ -34,7 +34,7 @@ No es un filesystem virtual, un gestor de secretos ni una herramienta de cifrado
 - **Contexto reutilizable:** `Manager` abre las primitivas una vez y las reutiliza durante las operaciones.
 - **Publicación sin sobrescritura:** evita reemplazar destinos existentes de forma accidental.
 - **Errores tipados:** excepciones propias con una jerarquía pública, preservando errores estándar del filesystem cuando corresponde.
-- **Inspección de transacciones:** diagnóstico de solo lectura de registros de operaciones interrumpidas.
+- **Estado transaccional en memoria:** no crea journals ni directorios de recuperación persistentes.
 
 ## Instalación
 
@@ -116,18 +116,21 @@ La función `obtain_password_from_secure_input()` es ilustrativa: debe sustituir
 `Manager` valida y abre el contenedor MasterKey. Mantiene las primitivas criptográficas preparadas para las operaciones posteriores.
 
 ```python
-manager = fscryptography.Manager(key=master_key)
+password = obtain_password_from_secure_input()
 
-try:
+with fscryptography.Manager(
+    key=master_key,
+    password=password,
+) as manager:
     manager.file.encrypt("informe.txt")
-finally:
-    manager.close()
 ```
 
 Se recomienda el administrador de contexto:
 
 ```python
-with fscryptography.Manager(key=master_key) as manager:
+plain_master_key = fscryptography.generate()
+
+with fscryptography.Manager(key=plain_master_key) as manager:
     manager.file.encrypt("informe.txt")
 ```
 
@@ -138,11 +141,16 @@ Al salir del bloque, `close()` invalida el gestor y libera sus referencias al ma
 ```python
 from pathlib import Path
 
-with fscryptography.Manager(key=master_key) as manager:
+password = obtain_password_from_secure_input()
+
+with fscryptography.Manager(
+    key=master_key,
+    password=password,
+) as manager:
     # Salida predeterminada: reporte.fscrypt
     manager.file.encrypt(Path("reporte.txt"))
 
-    # Extensión de salida personalizada: backup.locked
+    # Extensión de salida personalizada: backup.tar.locked
     manager.file.encrypt(
         Path("backup.tar.gz"),
         new_extension=".locked",
@@ -166,7 +174,12 @@ Parámetros:
 Para cifrar también el nombre:
 
 ```python
-with fscryptography.Manager(key=master_key) as manager:
+password = obtain_password_from_secure_input()
+
+with fscryptography.Manager(
+    key=master_key,
+    password=password,
+) as manager:
     manager.file.encrypt(
         "informe-confidencial.txt",
         encrypt_name=True,
@@ -178,7 +191,12 @@ Cuando `encrypt_name=True`, no se puede especificar `new_extension`: el nombre c
 ### 5. Descifrar archivos
 
 ```python
-with fscryptography.Manager(key=master_key) as manager:
+password = obtain_password_from_secure_input()
+
+with fscryptography.Manager(
+    key=master_key,
+    password=password,
+) as manager:
     manager.file.decrypt("reporte.fscrypt")
 ```
 
@@ -195,7 +213,12 @@ from pathlib import Path
 
 directory = Path("proyecto-privado")
 
-with fscryptography.Manager(key=master_key) as manager:
+password = obtain_password_from_secure_input()
+
+with fscryptography.Manager(
+    key=master_key,
+    password=password,
+) as manager:
     # Captura las entradas existentes antes de la transformación.
     # Ejecuta este ejemplo sin modificaciones concurrentes en el padre.
     parent = directory.parent
@@ -206,9 +229,10 @@ with fscryptography.Manager(key=master_key) as manager:
     # La API transforma el nombre in-place y devuelve None.
     # Identifica la nueva entrada comparando el estado anterior y posterior.
     new_entries = [
-        parent / name
-        for name in (item.name for item in parent.iterdir())
-        if name not in previous_entries
+        item
+        for item in parent.iterdir()
+        if item.name not in previous_entries
+        and not item.name.startswith(".fscryptography-txn-")
     ]
     if len(new_entries) != 1:
         raise RuntimeError(
@@ -228,19 +252,30 @@ Para proteger el contenido de un árbol de directorios, cada archivo debe proces
 
 ```python
 new_key = fscryptography.generate()
+current_password = obtain_password_from_secure_input()
 
-with fscryptography.Manager(key=master_key) as manager:
+with fscryptography.Manager(
+    key=master_key,
+    password=current_password,
+) as manager:
     manager.change_key(new_key)
 
     exported_key: str = manager.export_key()
 ```
 
+**Importante:** `change_key()` solo cambia la clave utilizada por operaciones nuevas. No vuelve a cifrar archivos existentes ni migra sus nombres. Cada recurso sigue requiriendo la MasterKey con la que fue cifrado; conserva las claves anteriores mientras existan recursos que dependan de ellas.
+
 Para cambiar a un contenedor protegido por contraseña:
 
 ```python
+current_password = obtain_password_from_secure_input()
+new_password = obtain_password_from_secure_input()
 protected_key = fscryptography.generate(password=new_password)
 
-with fscryptography.Manager(key=master_key) as manager:
+with fscryptography.Manager(
+    key=master_key,
+    password=current_password,
+) as manager:
     manager.change_key(
         protected_key,
         password=new_password,
@@ -249,19 +284,16 @@ with fscryptography.Manager(key=master_key) as manager:
 
 `export_key()` devuelve la MasterKey activa en Base64 estándar. Trata el valor exportado como un secreto de máxima sensibilidad.
 
-### 8. Inspeccionar registros de recuperación
+### 8. Comportamiento ante interrupciones
 
-`inspect_recovery(parent)` permite consultar registros de transacciones bajo un directorio padre:
+El estado transaccional existe únicamente en memoria durante la operación. La librería no crea journals, directorios de transacción ni ofrece inspección o recuperación automática después de una interrupción.
 
-```python
-with fscryptography.Manager(key=master_key) as manager:
-    records = manager.inspect_recovery("/ruta/al/directorio")
+Para procesar archivos grandes mediante streaming se utilizan temporales de resultado en el mismo directorio padre. La retirada segura del origen utiliza temporalmente un nombre hermano aleatorio. Si el proceso termina abruptamente o el equipo pierde energía, estos elementos pueden quedar en el filesystem; no existe un mecanismo de recuperación que los identifique, valide o elimine automáticamente. El consumidor debe inspeccionar el directorio y determinar manualmente qué conservar o eliminar. No borres un temporal sin verificar primero su contenido e identidad.
 
-    for record in records:
-        print(record)
-```
+En ejecución normal, la limpieza de temporales de resultado se intenta al cerrar la operación. Un fallo de retirada del origen puede dejar un temporal hermano que contiene el recurso original; el resultado publicado también puede permanecer. Conserva backups y no interpretes la presencia de ambos archivos como una transacción recuperable.
 
-La inspección es de solo lectura. No descifra, restaura, elimina ni resuelve transacciones. Una clasificación de estado no autoriza por sí misma a modificar o borrar recursos. Conserva los registros y archivos asociados hasta realizar una evaluación explícita.
+fscryptography no promete rollback, recuperación tras crash ni ausencia absoluta de residuos en apagones.
+
 
 ### 9. Excepciones
 
@@ -281,7 +313,6 @@ Las excepciones propias se exportan desde el paquete raíz y derivan de `FsCrypt
 | `BackendError` | Fallo inesperado de integración criptográfica. |
 | `ClosedInstanceError` | Se intentó usar un gestor cerrado. |
 | `AtomicOperationError` | No se pudo asegurar el estado esperado durante la operación. |
-| `RecoveryError` | Falló también la recuperación o rollback. |
 
 Los errores ordinarios del sistema de archivos pueden conservar excepciones estándar como `FileNotFoundError`, `FileExistsError`, `PermissionError` y `OSError`. Los errores de argumentos pueden ser `TypeError` o `ValueError`.
 
@@ -332,18 +363,18 @@ Los keysets de contenido y nombres son independientes. La generación de nonces 
 ## Compatibilidad y estado
 
 - Python: requisito declarado `>=3.11`.
-- Sistemas objetivo: Windows 11 y GNU/Linux (Ubuntu 22.04/24.04 LTS), x86-64.
-- Filesystems de referencia: NTFS y ext4.
-- La validación integral de filesystem y la matriz entre sistemas operativos **siguen pendientes**. La evidencia de pruebas del backend criptográfico no equivale a validar operaciones reales de filesystem.
-- Windows y GNU/Linux presentan diferencias en anclaje de directorios, publicación y durabilidad. No se debe extrapolar una garantía de una plataforma a otra.
+- Objetivos declarados: Windows 11 y GNU/Linux (Ubuntu 22.04/24.04 LTS), x86-64; Python 3.11–3.13.
+- Integración filesystem validada en CI sobre Ubuntu 22.04.5/24.04.5 con ext4 y Windows Server 2025 Datacenter (build 26100) con NTFS.
+- Windows 11 cliente todavía requiere validación específica; Windows Server 2025 no se presenta como sustituto de esa prueba.
+- La matriz CI valida los runners y opciones de filesystem observados, no todas las versiones de kernel, dispositivos, configuraciones de montaje ni condiciones de pérdida de energía.
 
-Consulta [docs/platform-compatibility.md](docs/platform-compatibility.md) para conocer la matriz, la evidencia existente y las pruebas pendientes.
+Consulta [docs/platform-compatibility.md](docs/platform-compatibility.md) para ver los entornos exactos, opciones de montaje y límites de extrapolación.
 
 ## Seguridad
 
 Esta librería manipula claves criptográficas y recursos del usuario. Antes de integrarla en un flujo sensible:
 
-- Lee el [modelo de seguridad](docs/security-model.md).
+- Lee el [modelo de seguridad](docs/security-model.md) y la [política de reporte de vulnerabilidades](SECURITY.md).
 - Define un procedimiento de backup y recuperación de MasterKey.
 - Protege la MasterKey y, cuando aplique, su contraseña fuera del árbol cifrado.
 - Prueba primero con datos desechables y verifica el resultado.
@@ -359,6 +390,8 @@ Esta librería manipula claves criptográficas y recursos del usuario. Antes de 
 La documentación normativa y de diseño se mantiene separada del manual de uso:
 
 - [Índice de documentación](docs/index.md)
+- [Versionado y compatibilidad](docs/versioning.md)
+- [Historial de cambios](CHANGELOG.md)
 - [Contrato de API](docs/api-reference.md)
 - [Arquitectura](docs/architecture.md)
 - [Diseño criptográfico](docs/cryptographic-design.md)
@@ -367,10 +400,10 @@ La documentación normativa y de diseño se mantiene separada del manual de uso:
 - [Gestión de claves](docs/key-management.md)
 - [Política Argon2id](docs/argon2id-policy.md)
 - [Cifrado de nombres](docs/filename-encryption.md)
-- [Operaciones atómicas](docs/atomic-operations.md)
-- [Journal y recuperación](docs/recovery-journal.md)
+- [Operaciones transaccionales y límites ante interrupciones](docs/atomic-operations.md)
 - [Errores y excepciones](docs/errors.md)
 - [Modelo de seguridad](docs/security-model.md)
+- [Política de seguridad y reporte de vulnerabilidades](SECURITY.md)
 - [Compatibilidad de plataformas](docs/platform-compatibility.md)
 - [Construcción y publicación](docs/releasing.md)
 - [Decisión de arquitectura inicial](docs/decisions/0001-initial-design.md)

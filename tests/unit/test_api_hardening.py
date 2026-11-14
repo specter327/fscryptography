@@ -45,13 +45,11 @@ def test_truncated_ciphertext_never_publishes_plaintext(manager, tmp_path):
     with pytest.raises(AuthenticationError):
         manager.file.decrypt(encrypted)
 
+    # Failed authentication must preserve the ciphertext and must not publish
+    # plaintext or leave a result temporary during normal exception cleanup.
     assert encrypted.is_file()
     assert not source.exists()
-    assert any(
-        record.operation == "file_decrypt"
-        and record.classification == "result_incomplete_or_unverified"
-        for record in manager.inspect_recovery(tmp_path)
-    )
+    assert not list(tmp_path.glob(".fscryptography-result-*"))
 
 
 def test_encrypted_unicode_filename_round_trip(manager, tmp_path):

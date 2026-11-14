@@ -14,16 +14,22 @@ Referencia técnica de la librería. El README contiene la presentación del pro
 - [Plan de pruebas del formato MasterKey](master-key-format-test-plan.md)
 - [Cifrado de nombres](filename-encryption.md)
 - [Formato de archivos](file-format.md)
-- [Operaciones atómicas](atomic-operations.md)
-- [Journal persistente y protocolo de recuperación](recovery-journal.md)
+- [Operaciones transaccionales y límites ante interrupciones](atomic-operations.md)
 - [API pública](api-reference.md)
 - [Errores y excepciones — contrato v1](errors.md)
 - [Modelo de seguridad](security-model.md)
+- [Política de seguridad y reporte de vulnerabilidades](../SECURITY.md)
 - [Compatibilidad](platform-compatibility.md)
+- [Versionado y compatibilidad](versioning.md)
 - [Construcción y publicación en PyPI](releasing.md)
 - [ADR 0001: diseño inicial](decisions/0001-initial-design.md)
 
 ## Estado
 **Definido** identifica requisitos acordados. **Propuesto** identifica el diseño preferido pendiente de validación. **Pendiente** señala decisiones aún abiertas. **Fuera de alcance** identifica capacidades que no pertenecen a la librería.
 
-No se debe presentar una propuesta como funcionalidad implementada. La validación del backend, los formatos binarios y las garantías de recuperación preceden a la implementación.
+No se debe presentar una propuesta como funcionalidad implementada. La implementación principal y la validación automatizada de backend, formatos y filesystem están presentes; la versión estable sigue condicionada a las validaciones residuales enumeradas en los documentos técnicos.
+
+
+## Estado de madurez
+
+La librería dispone de implementación funcional, formatos v1.0 documentados, pruebas unitarias, integración filesystem en runners ext4/NTFS, CI de dependencias mínimas y distribución wheel/sdist. Continúan pendientes la validación específica de Windows 11 cliente, fuzzing de larga duración y ampliación del corpus de regresión (ya existen pruebas property-based acotadas), escenarios ampliados de interrupción en Windows, revisión independiente y preparación final de release.

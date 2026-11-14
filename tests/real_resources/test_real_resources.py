@@ -201,16 +201,6 @@ def test_real_filesystem_resources() -> None:
             manager.file.decrypt(tamper_encrypted)
         _assert(tamper_encrypted.is_file(), "tampered ciphertext is retained for diagnosis")
         _assert(not tamper_source.exists(), "unauthenticated plaintext is not published")
-        recovery_records = manager.inspect_recovery(workspace)
-        _assert(
-            any(
-                record.operation == "file_decrypt"
-                and record.classification == "result_incomplete_or_unverified"
-                for record in recovery_records
-            ),
-            "recovery inspection reports the unverified decryption result",
-        )
-
         # Key replacement is validated before becoming active.
         _log("9/10 Replace the active key and use the new context.")
         replacement_key = fscryptography.generate()
@@ -224,17 +214,6 @@ def test_real_filesystem_resources() -> None:
         manager.file.decrypt(rotation_encrypted)
         _assert(rotation_source.read_bytes() == rotation_payload, "filesystem operations use the replacement context")
 
-        # Inspect the transaction journal without changing its state.
-        records_before = manager.inspect_recovery(workspace)
-        records_after = manager.inspect_recovery(workspace)
-        _assert(records_before == records_after, "recovery inspection is repeatable and read-only")
-        _log(f"Recovery journal entries observed: {len(records_after)}")
-        for record in records_after:
-            _log(
-                f"  operation={record.operation} "
-                f"state={record.state} "
-                f"classification={record.classification}"
-            )
 
 
     # Password-protected MasterKey uses the same high-level filesystem API.
