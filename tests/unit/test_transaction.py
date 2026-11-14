@@ -27,6 +27,22 @@ def test_close_removes_unpublished_result(tmp_path):
     assert not transaction.result_path.exists()
 
 
+def test_close_preserves_replacement_of_unpublished_result(tmp_path):
+    transaction = _transaction(tmp_path)
+    descriptor = transaction.open_result()
+    os.write(descriptor, b"transaction-owned result")
+    os.close(descriptor)
+
+    displaced = tmp_path / "displaced-original-result"
+    transaction.result_path.rename(displaced)
+    transaction.result_path.write_bytes(b"unrelated replacement")
+
+    transaction.close()
+
+    assert displaced.read_bytes() == b"transaction-owned result"
+    assert transaction.result_path.read_bytes() == b"unrelated replacement"
+
+
 def test_close_does_not_remove_entry_recreated_after_publication(tmp_path):
     transaction = _transaction(tmp_path)
     descriptor = transaction.open_result()
