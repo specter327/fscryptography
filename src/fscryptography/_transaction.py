@@ -28,6 +28,7 @@ class Transaction:
         self.directory_fd = os.dup(parent_fd) if parent_fd is not None else None
         self.state = "prepared"
         self._result_created = False
+        self._result_identity: tuple[int, int] | None = None
         self._closed = False
 
     @classmethod
@@ -45,8 +46,14 @@ class Transaction:
             fd = os.open(self.result_name, flags, 0o600, dir_fd=self.directory_fd)
         else:
             fd = os.open(self.result_path, flags, 0o600)
-        self._result_created = True
-        return fd
+        try:
+            info = os.fstat(fd)
+            self._result_identity = (info.st_dev, info.st_ino)
+            self._result_created = True
+            return fd
+        except BaseException:
+            os.close(fd)
+            raise
 
     def stat_result(self):
         if self.directory_fd is not None:
@@ -56,6 +63,7 @@ class Transaction:
     def mark_result_published(self) -> None:
         """Disable cleanup after the temporary entry has been renamed to its destination."""
         self._result_created = False
+        self._result_identity = None
 
     def rename_result_to(self, parent_fd: int, destination_name: str) -> None:
         if self.directory_fd is None:
@@ -86,14 +94,23 @@ class Transaction:
         if self._closed:
             return
         self._closed = True
-        # Normal exception paths remove an unpublished result. Once publication
-        # succeeds, the original temporary name is no longer ours to clean up.
-        if self._result_created:
+        # Remove only the entry that still identifies the object created by
+        # open_result(). A replaced or recreated name is not ours to delete.
+        if self._result_created and self._result_identity is not None:
             try:
                 if self.directory_fd is not None:
-                    os.unlink(self.result_name, dir_fd=self.directory_fd)
+                    current = os.stat(
+                        self.result_name,
+                        dir_fd=self.directory_fd,
+                        follow_symlinks=False,
+                    )
                 else:
-                    self.result_path.unlink(missing_ok=True)
+                    current = self.result_path.lstat()
+                if (current.st_dev, current.st_ino) == self._result_identity:
+                    if self.directory_fd is not None:
+                        os.unlink(self.result_name, dir_fd=self.directory_fd)
+                    else:
+                        self.result_path.unlink()
             except FileNotFoundError:
                 pass
             except OSError:
