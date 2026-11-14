@@ -360,6 +360,27 @@ def _read_header(stream: BinaryIO):
     return parse_header(fixed + _read_exact(stream, header_length - FIXED_HEADER_SIZE))
 
 
+
+def _source_snapshot(info: os.stat_result) -> tuple[int, int, int, int, int]:
+    """Return stable source metadata that survives a same-directory rename.
+
+    ctime is intentionally excluded because the staging rename itself may
+    update it. Identity, link count, size, and mtime still detect ordinary
+    same-object writes between streaming and source retirement.
+    """
+    return (
+        info.st_dev,
+        info.st_ino,
+        info.st_nlink,
+        info.st_size,
+        getattr(info, "st_mtime_ns", int(info.st_mtime * 1_000_000_000)),
+    )
+
+
+def _matches_source_snapshot(current: os.stat_result, expected: os.stat_result) -> bool:
+    return _source_snapshot(current) == _source_snapshot(expected)
+
+
 def _assert_source_unchanged(stream: BinaryIO, expected: os.stat_result) -> None:
     """Reject ordinary in-place source mutations observed during streaming.
 
@@ -546,9 +567,7 @@ def _windows_delete_file_by_identity(path: Path, expected: os.stat_result) -> No
         )
         handle = None  # descriptor now owns the native handle
         current = os.fstat(descriptor)
-        if not stat.S_ISREG(current.st_mode) or (
-            current.st_dev, current.st_ino
-        ) != (expected.st_dev, expected.st_ino):
+        if not stat.S_ISREG(current.st_mode) or not _matches_source_snapshot(current, expected):
             raise AtomicOperationError(
                 "quarantined source identity changed; no file was deleted"
             )
@@ -592,8 +611,7 @@ def _retire_source(
             if (
                 not stat.S_ISREG(moved.st_mode)
                 or _is_reparse_point(moved)
-                or moved.st_nlink != 1
-                or (moved.st_dev, moved.st_ino) != (expected.st_dev, expected.st_ino)
+                or not _matches_source_snapshot(moved, expected)
             ):
                 try:
                     os.rename(retained, source_path)  # Fails rather than replacing a new source entry.
@@ -630,8 +648,7 @@ def _retire_source(
         current = os.stat(transaction.retained_name, dir_fd=transaction.directory_fd, follow_symlinks=False)
         if (
             not stat.S_ISREG(current.st_mode)
-            or current.st_nlink != 1
-            or (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino)
+            or not _matches_source_snapshot(current, expected)
         ):
             try:
                 _renameat2(transaction.directory_fd, transaction.retained_name, anchor.fd, source_path.name)
@@ -755,7 +772,7 @@ class _FileOperations:
             _retire_source(
                 source_path,
                 transaction,
-                source_info,
+                opened_info,
                 anchor,
                 output_kind="encrypted output",
             )
@@ -837,7 +854,7 @@ class _FileOperations:
             _retire_source(
                 source_path,
                 transaction,
-                source_info,
+                opened_info,
                 anchor,
                 output_kind="plaintext",
             )
