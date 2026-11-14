@@ -71,3 +71,28 @@ def test_malformed_file_header_is_a_format_error_and_preserves_source(manager, t
         manager.file.decrypt(source)
 
     assert source.read_bytes() == b"not a valid FSCRFIL header"
+
+
+
+def test_encrypted_directory_name_classifies_malformed_envelope(manager, tmp_path):
+    malformed = tmp_path / "~1!"
+    malformed.mkdir()
+
+    with pytest.raises(FormatError):
+        manager.dir.decrypt(malformed)
+
+    assert malformed.is_dir()
+
+
+def test_encrypted_directory_name_classifies_authentication_failure(manager, tmp_path):
+    import base64
+
+    raw_ciphertext = b"\\x00" * 33
+    encoded = base64.urlsafe_b64encode(raw_ciphertext).rstrip(b"=").decode("ascii")
+    candidate = tmp_path / ("~1" + encoded)
+    candidate.mkdir()
+
+    with pytest.raises(AuthenticationError):
+        manager.dir.decrypt(candidate)
+
+    assert candidate.is_dir()
