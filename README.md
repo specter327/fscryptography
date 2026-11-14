@@ -332,18 +332,18 @@ Los keysets de contenido y nombres son independientes. La generación de nonces 
 ## Compatibilidad y estado
 
 - Python: requisito declarado `>=3.11`.
-- Sistemas objetivo: Windows 11 y GNU/Linux (Ubuntu 22.04/24.04 LTS), x86-64.
-- Filesystems de referencia: NTFS y ext4.
-- La validación integral de filesystem y la matriz entre sistemas operativos **siguen pendientes**. La evidencia de pruebas del backend criptográfico no equivale a validar operaciones reales de filesystem.
-- Windows y GNU/Linux presentan diferencias en anclaje de directorios, publicación y durabilidad. No se debe extrapolar una garantía de una plataforma a otra.
+- Objetivos declarados: Windows 11 y GNU/Linux (Ubuntu 22.04/24.04 LTS), x86-64; Python 3.11–3.13.
+- Integración filesystem validada en CI sobre Ubuntu 22.04.5/24.04.5 con ext4 y Windows Server 2025 Datacenter (build 26100) con NTFS.
+- Windows 11 cliente todavía requiere validación específica; Windows Server 2025 no se presenta como sustituto de esa prueba.
+- La matriz CI valida los runners y opciones de filesystem observados, no todas las versiones de kernel, dispositivos, configuraciones de montaje ni condiciones de pérdida de energía.
 
-Consulta [docs/platform-compatibility.md](docs/platform-compatibility.md) para conocer la matriz, la evidencia existente y las pruebas pendientes.
+Consulta [docs/platform-compatibility.md](docs/platform-compatibility.md) para ver los entornos exactos, opciones de montaje y límites de extrapolación.
 
 ## Seguridad
 
 Esta librería manipula claves criptográficas y recursos del usuario. Antes de integrarla en un flujo sensible:
 
-- Lee el [modelo de seguridad](docs/security-model.md).
+- Lee el [modelo de seguridad](docs/security-model.md) y la [política de reporte de vulnerabilidades](SECURITY.md).
 - Define un procedimiento de backup y recuperación de MasterKey.
 - Protege la MasterKey y, cuando aplique, su contraseña fuera del árbol cifrado.
 - Prueba primero con datos desechables y verifica el resultado.
@@ -371,6 +371,7 @@ La documentación normativa y de diseño se mantiene separada del manual de uso:
 - [Journal y recuperación](docs/recovery-journal.md)
 - [Errores y excepciones](docs/errors.md)
 - [Modelo de seguridad](docs/security-model.md)
+- [Política de seguridad y reporte de vulnerabilidades](SECURITY.md)
 - [Compatibilidad de plataformas](docs/platform-compatibility.md)
 - [Construcción y publicación](docs/releasing.md)
 - [Decisión de arquitectura inicial](docs/decisions/0001-initial-design.md)

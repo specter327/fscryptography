@@ -61,7 +61,7 @@ El módulo interno `fscryptography._master_key` implementa la generación y aper
 
 La API pública implementa `fscryptography.generate()`, `Manager`, cambio de clave, exportación Base64 y ciclo de vida. Las operaciones de archivo y directorio están integradas con las primitivas criptográficas y el filesystem: cifrado/descifrado segmentado de archivos, transformación de nombres, temporales transaccionales, publicación sin reemplazo y journal persistente con inspección de solo lectura.
 
-La validación integral de las garantías de filesystem sigue pendiente en la matriz de plataformas objetivo. La implementación no implica que NTFS, ext4, todas las configuraciones de Windows o GNU/Linux hayan superado pruebas exhaustivas.
+La integración filesystem está validada en CI sobre Ubuntu 22.04.5/24.04.5 con ext4 y Windows Server 2025 Datacenter con NTFS, Python 3.11–3.13. Esto no valida todas las configuraciones de filesystem ni sustituye una prueba específica en Windows 11 cliente. La durabilidad ante pérdida de energía y los fallos físicos no están simulados.
 
 ## Responsabilidad del consumidor
 
