@@ -79,3 +79,6 @@ No se ha completado una auditoría criptográfica independiente. Las pruebas aut
 ## Pruebas property-based
 
 Los parsers de cabecera de archivo v1.0 y framing/Base64 de MasterKey disponen de pruebas property-based acotadas con Hypothesis. Estas pruebas buscan excepciones no clasificadas y verifican invariantes de round-trip para datos válidos. No sustituyen fuzzing de larga duración, sanitizadores, pruebas de hardware ni auditoría independiente.
+
+
+El procedimiento y los criterios de campaña prolongada están definidos en [Plan de fuzzing y pruebas prolongadas](fuzzing-plan.md). La documentación del plan no implica que la campaña ya se haya ejecutado.
