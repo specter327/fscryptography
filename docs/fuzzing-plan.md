@@ -27,7 +27,7 @@ No uses secretos reales ni corpus derivados de archivos privados.
 - Las excepciones públicas permanecen clasificadas y estables.
 - Un caso que encuentre un defecto se reduce, se conserva como fixture/regresión y se ejecuta en CI.
 
-## Fase A — Repetición reproducible de Hypothesis
+## Fase A — Ejecución reproducible
 
 En un checkout limpio de la rama candidata:
 
@@ -42,35 +42,35 @@ Conserva SHA, versión Python/dependencias, estadísticas Hypothesis y salida co
 
 No asumas un perfil Hypothesis adicional si no está declarado por el proyecto. No cambies el número de ejemplos de CI sin revisar antes el tiempo de ejecución y la cobertura real.
 
-## Fase B — Campaña prolongada
+## Fase B — Campaña prolongada reproducible
 
-Ejecuta en un runner dedicado, sin datos importantes, con CPU y memoria monitorizadas. La campaña inicial recomendada es de 24 horas por plataforma Linux y Windows; si el presupuesto no lo permite, registra explícitamente el tiempo menor y no lo describas como campaña de 24 horas.
+El repositorio incluye `tools/fuzz/run_hypothesis_campaign.py`, un ejecutor multiplataforma basado exclusivamente en la biblioteca estándar. Repite la suite existente, conserva un log por iteración y escribe `campaign.json` con SHA, intérprete, sistema, versiones disponibles de paquetes, duración efectiva, comando y códigos de salida.
 
-Ejemplo Bash para una campaña de 24 horas que repite la suite existente y conserva cada salida:
+Instala las dependencias de prueba y ejecuta una campaña de 24 horas en un runner dedicado:
 
 ```bash
-mkdir -p artifacts/fuzz
-deadline=$((SECONDS + 24 * 60 * 60))
-iteration=0
-while (( SECONDS < deadline )); do
-  iteration=$((iteration + 1))
-  printf 'iteration=%s start=%s\n' "$iteration" "$(date -Is)" \
-    | tee -a artifacts/fuzz/campaign.log
-  python -m pytest -q --hypothesis-show-statistics tests \
-    > "artifacts/fuzz/run-${iteration}.log" 2>&1
-  status=$?
-  printf 'iteration=%s exit=%s end=%s\n' "$iteration" "$status" "$(date -Is)" \
-    | tee -a artifacts/fuzz/campaign.log
-  if (( status != 0 )); then
-    echo "Failure detected; stopping campaign." | tee -a artifacts/fuzz/campaign.log
-    exit "$status"
-  fi
-done
+python -m pip install -e ".[test]"
+python tools/fuzz/run_hypothesis_campaign.py --duration-seconds 86400 --output-dir artifacts/fuzz/linux
 ```
 
-En Windows PowerShell, usa un bucle equivalente con `Get-Date` e invocación de `python -m pytest`, redirigiendo una salida distinta por iteración. No ejecutes campañas concurrentes que compitan por el mismo directorio de fixtures.
+En Windows PowerShell, el mismo comando Python es válido:
 
-Esta repetición prolonga la exploración Hypothesis existente, pero no garantiza inputs nuevos en cada iteración. Para fuzzing coverage-guided real, añade posteriormente un harness dedicado (por ejemplo, Atheris para superficies Python compatibles) y define corpus, cobertura, límites de recursos y sanitización antes de declararlo operativo.
+```powershell
+py -m pip install -e ".[test]"
+py tools/fuzz/run_hypothesis_campaign.py --duration-seconds 86400 --output-dir artifacts/fuzz/windows-11
+```
+
+Para una prueba operativa breve antes de reservar un runner:
+
+```bash
+python tools/fuzz/run_hypothesis_campaign.py --duration-seconds 60 --output-dir artifacts/fuzz/smoke
+```
+
+Cada directorio de salida es de una sola campaña: el ejecutor se niega a sobrescribir un `campaign.json` existente. Usa un directorio nuevo para cada ejecución. El código de salida distinto de cero indica que una iteración falló; detén el análisis y realiza triage antes de reanudar. Una interrupción externa puede dejar el manifiesto con estado `running`; no la registres como campaña completada.
+
+Ejecuta en un runner dedicado, sin datos importantes, con CPU y memoria monitorizadas externamente. Registra también el modelo de CPU, memoria disponible, versión/build exactos del SO, filesystem y configuración del volumen, ya que estos datos dependen del entorno y no se infieren de forma fiable desde el ejecutor. No ejecutes campañas concurrentes que compitan por el mismo directorio de fixtures.
+
+Esta repetición prolonga la exploración Hypothesis existente, pero no garantiza inputs nuevos en cada iteración. No equivale a fuzzing coverage-guided. Para añadir Atheris u otro motor de cobertura, define primero superficies compatibles, corpus sintético, cobertura, límites de recursos y soporte por plataforma; no se considera parte de esta tarea.
 
 ## Fase C — Corpus y regresiones
 
@@ -96,6 +96,7 @@ Cualquier crash, excepción inesperada, consumo desproporcionado de memoria/CPU 
 - [x] Identificar pruebas property-based existentes como evidencia acotada, no fuzzing prolongado.
 - [x] Definir superficies, invariantes, corpus y política de regresiones.
 - [x] Definir procedimiento reproducible para campaña prolongada.
+- [x] Añadir ejecutor multiplataforma que conserva manifiesto y logs por iteración.
 - [ ] Ejecutar campaña de 24 horas en GNU/Linux.
 - [ ] Ejecutar campaña de 24 horas en Windows 11 cliente.
 - [ ] Triar todos los hallazgos y añadir regresiones.
