@@ -90,6 +90,8 @@ def main() -> int:
         "pytest",
         "-q",
         "--hypothesis-show-statistics",
+        "--rootdir",
+        str(root),
         args.tests,
     ]
     manifest: dict[str, Any] = {
