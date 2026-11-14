@@ -130,3 +130,19 @@ def test_destination_component_limit_is_enforced_after_decryption():
     encoded = encrypt_name("a" * 20, primitive)
     with pytest.raises(NameConstraintError):
         decrypt_name(encoded, primitive, max_component_bytes=10)
+
+
+@pytest.mark.parametrize(
+    ("name", "limit"),
+    [
+        ("é" * 255, 255),
+        ("😀" * 127, 255),
+    ],
+)
+def test_windows_component_limit_uses_utf16_code_units(name, limit):
+    validate_name(name, profile=NameProfile.WINDOWS, max_component_bytes=limit)
+
+
+def test_windows_component_limit_rejects_more_than_255_utf16_code_units():
+    with pytest.raises(NameConstraintError, match="component limit"):
+        validate_name("😀" * 128, profile=NameProfile.WINDOWS, max_component_bytes=255)

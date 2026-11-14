@@ -274,3 +274,46 @@ def test_real_filesystem_resources() -> None:
 
 if __name__ == "__main__":
     test_real_filesystem_resources()
+
+
+@pytest.mark.parametrize("name", ["café-日本語.txt", "e\u0301-report.txt", "emoji-🔐.bin"])
+def test_unicode_filename_round_trip_on_real_filesystem(tmp_path, name):
+    source = tmp_path / name
+    payload = ("Unicode filename payload: " + name).encode("utf-8")
+    source.write_bytes(payload)
+
+    with fscryptography.Manager(key=fscryptography.generate()) as manager:
+        manager.file.encrypt(source, encrypt_name=True)
+        encrypted_candidates = [
+            path for path in tmp_path.iterdir()
+            if path.is_file() and path.name.startswith("~1")
+        ]
+        assert len(encrypted_candidates) == 1
+        encrypted = encrypted_candidates[0]
+        assert encrypted.name != name
+        manager.file.decrypt(encrypted)
+
+    assert source.read_bytes() == payload
+    assert source.name == name
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="case-insensitive collision semantics are Windows-specific")
+def test_windows_case_insensitive_decryption_collision_preserves_entries(tmp_path):
+    source = tmp_path / "CaseSensitive.txt"
+    source.write_bytes(b"encrypted source")
+
+    with fscryptography.Manager(key=fscryptography.generate()) as manager:
+        manager.file.encrypt(source, encrypt_name=True)
+        encrypted = next(
+            path for path in tmp_path.iterdir()
+            if path.is_file() and path.name.startswith("~1")
+        )
+
+        competitor = tmp_path / "casesensitive.txt"
+        competitor.write_bytes(b"pre-existing competitor")
+
+        with pytest.raises(DestinationConflictError):
+            manager.file.decrypt(encrypted)
+
+        assert encrypted.is_file()
+        assert competitor.read_bytes() == b"pre-existing competitor"
