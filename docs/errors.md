@@ -32,7 +32,7 @@ Todas las excepciones propias derivan de `FsCryptographyError`, que deriva de `E
 ### Definiciones
 
 - **FsCryptographyError:** clase base pública para los errores propios de fscryptography.
-- **InvalidPathError:** la ruta o el componente no puede utilizarse como entrada. No es un alias general de `FileNotFoundError`; ciertas comprobaciones de anclaje del directorio padre traducen el fallo de apertura a esta categoría.
+- **InvalidPathError:** la ruta o el componente no puede utilizarse como entrada, o la ruta visible del directorio padre dejó de identificar al directorio anclado durante la operación. No es un alias general de `FileNotFoundError`; las comprobaciones de anclaje traducen a esta categoría tanto el fallo de apertura como la detección de una ruta padre ausente, sustituida o convertida en enlace simbólico.
 - **UnsupportedResourceError:** el recurso existe, pero su tipo o condición no está admitido, por ejemplo symlink, reparse point, hard link adicional o tipo de recurso incorrecto.
 - **FormatError:** encabezado, framing, metadatos o estructura binaria malformados, incompletos o no reconocibles.
 - **UnsupportedFormatVersionError:** versión mayor/menor no admitida. Deriva de `FormatError`; no se intenta downgrade.
@@ -76,7 +76,8 @@ Todas las excepciones propias derivan de `FsCryptographyError`, que deriva de `E
 | Publicación | Destino existente | `DestinationConflictError` |
 | Publicación | Primitiva no-replace no disponible o fallo de publicación | `AtomicOperationError` |
 | Transformación | Identidad/metadatos del origen cambian durante el streaming | `AtomicOperationError` |
-| Retirada del origen | Falla staging, verificación, eliminación o sincronización después de publicar salida | `AtomicOperationError`; la salida puede permanecer publicada y el origen puede requerir inspección |
+| Retirada del origen | La ruta visible del padre ya no identifica al directorio anclado antes del staging o de retirar el origen (GNU/Linux) | `InvalidPathError`; si el resultado ya se publicó, permanece en el directorio anclado y el origen se conserva |
+| Retirada del origen | Falla staging, verificación de identidad, eliminación o sincronización, sin incluir el cambio detectado de ruta padre | `AtomicOperationError`; la salida puede permanecer publicada y el origen puede requerir inspección |
 | Renombrado de directorio | Conflicto de destino | `DestinationConflictError` |
 | Renombrado de directorio | Error de syscall antes de modificar el namespace (Linux) | Excepción estándar `OSError` |
 | Renombrado de directorio | Identidad cambiada o fallo de rename/restauración en la ruta Windows, o fallo al restaurar tras mover | `InvalidPathError` o `AtomicOperationError`, según si la restauración se confirmó |
@@ -85,7 +86,7 @@ Todas las excepciones propias derivan de `FsCryptographyError`, que deriva de `E
 
 1. Antes de publicar el resultado, errores de lectura/escritura que sean `OSError` se propagan como errores del sistema; errores de autenticación y formato mantienen su categoría.
 2. Un conflicto de destino se expresa como `DestinationConflictError`; no se reemplaza el destino existente.
-3. Después de publicar el resultado, la retirada del origen es una fase distinta. Si falla, se usa `AtomicOperationError` porque puede existir ya un resultado válido y el origen puede seguir presente, haberse movido a un nombre temporal o requerir inspección manual.
+3. Después de publicar el resultado, la retirada del origen es una fase distinta. Los fallos de staging, identidad, eliminación o sincronización se clasifican como `AtomicOperationError`; en GNU/Linux, si la comprobación detecta que la ruta visible del padre dejó de identificar al directorio anclado, se propaga `InvalidPathError`. En ambos casos puede existir ya un resultado válido y el origen puede seguir presente, haberse movido a un nombre temporal o requerir inspección manual.
 4. El adaptador interno `load_name_primitive()` traduce fallos al registrar/restaurar un keyset de nombres a `BackendError`; rechaza argumentos de tipo incorrecto con `TypeError` y bytes vacíos con `ValueError`.
 5. El cleanup de temporales es best-effort. Un error de cleanup no debe ocultar el error primario y no se garantiza limpieza tras terminación abrupta.
 6. `AtomicOperationError` no significa que la operación se haya revertido. El llamador debe inspeccionar el estado real antes de reintentar.
