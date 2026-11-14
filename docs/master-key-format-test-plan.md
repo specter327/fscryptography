@@ -100,9 +100,9 @@ La fase de especificación del formato se considera cerrada cuando:
 
 La política de producción aprobada para v1 utiliza Argon2id v19 con 64 MiB, 3 iteraciones y paralelismo 1; exige aceptación estricta del perfil antes de ejecutar la KDF. Los valores de fixtures de bajo coste no deben ser aceptados por el parser productivo. Los límites de entrada y contraseña están aprobados contractualmente; véase [Política de Argon2id y límites de apertura](argon2id-policy.md).
 
-El parser/generador productivo MasterKey v1.0 y la fachada pública `Crypto` están implementados. Las operaciones funcionales de archivos/directorios permanecen pendientes; el formato de archivo continúa en propuesta hasta cerrar la semántica de extensión y el contrato de `new_extension`.
+El parser/generador productivo MasterKey v1.0 y la fachada pública están implementados. La cobertura productiva y sus límites se describen en el estado de ejecución.
 
 
 ## Estado de ejecución
 
-Las pruebas de `tests/master_key_format/test_master_key_format_vectors.py` siguen validando el layout aprobado mediante un verificador exclusivo de pruebas. El parser productivo se encuentra en `src/fscryptography/_master_key.py` y genera/restaura keysets Tink reales. El vector protegido sintético usa Argon2id con coste deliberadamente bajo para que la prueba sea rápida; nunca debe reutilizarse en producción.
+Las pruebas de `tests/master_key_format/test_master_key_format_vectors.py` validan el layout aprobado mediante un verificador exclusivo de pruebas. El parser productivo de `src/fscryptography/_master_key.py` genera y restaura keysets Tink reales. `tests/unit/test_master_key.py` cubre la integración productiva: generación y apertura en ambos modos, uso de la primitiva AEAD de nombres, contraseña incorrecta, alteración del payload, Base64 canónico, límites de contraseña y rechazo de cada campo del perfil Argon2id no admitido antes de ejecutar la KDF, además del rechazo de contraseñas UTF-8 fuera de límite. El control de concurrencia/admisión de aperturas protegidas corresponde a la aplicación integradora; la librería no implementa un limitador interno. Los vectores sintéticos de estructura usan Argon2id de bajo coste y keysets opacos no válidos; nunca deben aceptarse como contenedores productivos.

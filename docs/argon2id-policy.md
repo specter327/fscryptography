@@ -6,7 +6,7 @@
 
 Esta política define el perfil de protección por contraseña y los límites que deben comprobarse antes de ejecutar Argon2id. No modifica el layout binario v1.0 aprobado: los parámetros continúan almacenándose en los campos ya definidos de la cabecera protegida.
 
-Los valores de los fixtures de prueba no son parámetros de producción. La aprobación del perfil no implica que el parser productivo o la gestión de claves estén implementados.
+Los valores de los fixtures de prueba no son parámetros de producción. El parser productivo valida el perfil y los límites de entrada antes de ejecutar Argon2id. La política no define un limitador interno de concurrencia: la aplicación integradora debe controlar la admisión de aperturas protegidas.
 
 ## Perfil de producción aprobado
 
@@ -104,6 +104,7 @@ Debe existir al menos una prueba que confirme que el parser productivo rechaza l
 - [x] Ejecutar benchmark repetido del perfil en el equipo de referencia del proyecto.
 - [x] Aprobar Argon2id v19 / 65.536 KiB / 3 / 1 como perfil de producción v1.
 - [x] Confirmar los límites de entrada y contraseña como parte del contrato normativo de MasterKey v1.
-- [ ] Añadir pruebas del parser productivo que verifiquen rechazo previo a KDF y límites de concurrencia/admisión si se implementa.
+- [x] Añadir pruebas del parser productivo que verifiquen el rechazo del perfil no admitido y de contraseñas fuera de límite antes de ejecutar Argon2id.
+- [x] Documentar la responsabilidad de la aplicación integradora sobre la concurrencia de aperturas; la librería no implementa un mecanismo interno de admisión.
 
-El perfil criptográfico y los límites de entrada de MasterKey v1 están aprobados. La implementación productiva y sus pruebas siguen pendientes.
+El perfil criptográfico, los límites de entrada y el orden de validación de MasterKey v1 están implementados y cubiertos por pruebas del parser productivo. La admisión de aperturas concurrentes permanece bajo responsabilidad de la aplicación integradora, conforme a esta política.
