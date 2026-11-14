@@ -140,11 +140,12 @@ Antes de publicar soporte v1 se debe:
 - [x] Definir una matriz objetivo inicial: Windows 11 y Ubuntu 22.04/24.04 LTS, x86-64, CPython 3.11–3.13, NTFS/ext4.
 - [x] Separar evidencia de backend criptográfico de validación integral de filesystem.
 - [x] Definir contrato de nombres reservados Windows, UTF-8 estricto y semántica de equivalencia/casefold por filesystem.
-- [x] Configurar CI de backend criptográfico en Windows para CPython 3.11–3.13 (pendiente de una ejecución verde antes de considerar validado el entorno).
-- [ ] Ejecutar pruebas integrales de filesystem en NTFS y ext4 y confirmar el tipo real del volumen en los logs de CI.
+- [x] Ejecutar CI de backend criptográfico en Windows y GNU/Linux para CPython 3.11–3.13; la matriz documentada terminó correctamente. Esta evidencia no sustituye la integración real de filesystem.
+- [x] Ejecutar pruebas integrales de filesystem sobre ext4 y NTFS en runners representativos y registrar el tipo real del volumen: Ubuntu 22.04/24.04 y Windows Server 2025.
 - [x] Medir nombres GNU/Linux en bytes UTF-8 y nombres Windows en unidades UTF-16; probar round-trip Unicode en la matriz de filesystem.
 - [x] Definir el contrato `str`/`os.PathLike[str]` y rechazar `PathLike[bytes]`.
 - [x] Añadir round-trip de filesystem con rutas largas, incluida una ruta Windows superior a MAX_PATH cuando el runner la soporta.
+- [ ] Ejecutar la matriz integral de filesystem específicamente en Windows 11 cliente; Windows Server 2025 no sustituye esa validación.
 - [ ] Fijar rangos runtime de dependencias y metadatos de empaquetado.
 - [ ] Declarar soporte únicamente después de que todas las pruebas requeridas pasen.
 
