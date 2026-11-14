@@ -61,7 +61,11 @@ Python no garantiza borrado seguro de secretos. close() invalida el gestor y lib
 
 ## Integridad y estado transaccional
 
-El estado transaccional solo existe en memoria. No hay journal persistente, inspección posterior ni recuperación automática. La terminación abrupta puede dejar temporales de resultado o de staging del origen en el directorio padre; la librería no los identifica ni los elimina en una ejecución posterior. El consumidor debe evaluar manualmente esos residuos, verificando identidad y contenido antes de cualquier eliminación o restauración. Los tests de ejecución normal no equivalen a pruebas de pérdida de energía ni a garantías de durabilidad física.
+El estado transaccional solo existe en memoria. No hay journal persistente, inspección posterior ni recuperación automática. La terminación abrupta puede dejar temporales de resultado o de staging del origen en el directorio padre; la librería no los identifica ni los elimina en una ejecución posterior. El consumidor debe evaluar manualmente esos residuos, verificando identidad y contenido antes de cualquier eliminación o restauración.
+
+Con `encrypt_name=True`, dos operaciones concurrentes sobre el mismo origen pueden generar nombres de destino aleatorios distintos y publicar ambos ciphertexts antes de competir por la retirada del origen. Una operación puede completar la retirada y la otra fallar dejando un ciphertext duplicado publicado. Este resultado parcial es intencionalmente visible y no se limpia automáticamente; el consumidor debe decidir cuál conservar.
+
+Los tests de ejecución normal no equivalen a pruebas de pérdida de energía ni a garantías de durabilidad física.
 
 ## No objetivos
 
