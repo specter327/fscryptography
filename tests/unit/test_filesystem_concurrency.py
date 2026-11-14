@@ -550,3 +550,82 @@ def test_linux_source_retirement_unlink_is_not_conditional_on_checked_inode(
     assert not list(tmp_path.glob(".fscryptography-source-*"))
     assert not source.exists()
     assert (tmp_path / "retirement-race.fscrypt").is_file()
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="directory descriptor anchoring is GNU/Linux-only")
+def test_encrypt_rejects_replaced_parent_before_publishing(manager, tmp_path, monkeypatch):
+    """A parent pathname replaced during streaming must not receive a result."""
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    source = parent / "payload.bin"
+    payload = b"parent replacement must not redirect publication"
+    source.write_bytes(payload)
+    displaced = tmp_path / "displaced-parent"
+    real_copy_encrypt = _filesystem._copy_encrypt
+    replaced = False
+
+    def replace_parent_after_stream(primitive, original, destination, aad):
+        nonlocal replaced
+        real_copy_encrypt(primitive, original, destination, aad)
+        os.rename(parent, displaced)
+        parent.mkdir()
+        replaced = True
+
+    monkeypatch.setattr(_filesystem, "_copy_encrypt", replace_parent_after_stream)
+    with pytest.raises(fscryptography.InvalidPathError, match="parent directory"):
+        manager.file.encrypt(source)
+    assert replaced
+    assert (displaced / "payload.bin").read_bytes() == payload
+    assert not list(displaced.glob("*.fscrypt"))
+    assert list(parent.iterdir()) == []
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="directory descriptor anchoring is GNU/Linux-only")
+def test_encrypt_preserves_source_if_parent_is_replaced_after_publication(manager, tmp_path, monkeypatch):
+    """A parent replacement between publication and retirement must preserve the source."""
+    parent = tmp_path / "parent-after-publish"
+    parent.mkdir()
+    source = parent / "payload.bin"
+    payload = b"published result must not trigger source retirement in a detached parent"
+    source.write_bytes(payload)
+    displaced = tmp_path / "displaced-parent-after-publish"
+    rename_result = _filesystem.Transaction.rename_result_to
+    replaced = False
+
+    def publish_then_replace(transaction, parent_fd, destination_name):
+        nonlocal replaced
+        rename_result(transaction, parent_fd, destination_name)
+        os.rename(parent, displaced)
+        parent.mkdir()
+        replaced = True
+
+    monkeypatch.setattr(_filesystem.Transaction, "rename_result_to", publish_then_replace)
+    with pytest.raises(fscryptography.InvalidPathError, match="parent directory"):
+        manager.file.encrypt(source)
+    assert replaced
+    assert (displaced / "payload.bin").read_bytes() == payload
+    assert (displaced / "payload.fscrypt").is_file()
+    assert list(parent.iterdir()) == []
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="directory descriptor anchoring is GNU/Linux-only")
+def test_directory_rename_rejects_replaced_parent_path(manager, tmp_path, monkeypatch):
+    """Directory-name transformations validate the parent pathname before rename."""
+    parent = tmp_path / "directory-parent"
+    parent.mkdir()
+    source = parent / "folder"
+    source.mkdir()
+    displaced = tmp_path / "displaced-directory-parent"
+    real_encrypt_name = _filesystem.encrypt_name_fn
+
+    def replace_parent_before_rename(name, primitive, profile, limit):
+        result = real_encrypt_name(name, primitive, profile, limit)
+        os.rename(parent, displaced)
+        parent.mkdir()
+        return result
+
+    monkeypatch.setattr(_filesystem, "encrypt_name_fn", replace_parent_before_rename)
+    with pytest.raises(fscryptography.InvalidPathError, match="parent directory"):
+        manager.dir.encrypt(source)
+    assert (displaced / "folder").is_dir()
+    assert list(parent.iterdir()) == []

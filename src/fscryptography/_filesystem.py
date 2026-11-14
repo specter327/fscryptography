@@ -638,6 +638,7 @@ def _retire_source(
     try:
         if transaction.directory_fd is None:
             raise RuntimeError("anchored source retirement requires a parent directory descriptor")
+        anchor.verify_path_still_names_anchor()
         anchor.rename_noreplace(source_path.name, transaction.directory_fd, transaction.retained_name)
     except Exception as exc:
         raise AtomicOperationError(
@@ -761,6 +762,7 @@ class _FileOperations:
                 _sync_close(output)
             transaction.set_result_ready(transaction.stat_result())
             if anchor is not None:
+                anchor.verify_path_still_names_anchor()
                 transaction.rename_result_to(anchor.fd, destination.name)
                 anchor.sync()
             else:
@@ -841,6 +843,7 @@ class _FileOperations:
                 _sync_close(output)
             transaction.set_result_ready(transaction.stat_result())
             if anchor is not None:
+                anchor.verify_path_still_names_anchor()
                 transaction.rename_result_to(anchor.fd, destination.name)
                 anchor.sync()
                 os.fsync(transaction.directory_fd)
@@ -895,6 +898,7 @@ class _DirectoryOperations:
                 parent_fd=anchor.fd if anchor is not None else None,
             )
             if anchor is not None:
+                anchor.verify_path_still_names_anchor()
                 _rename_directory_checked(anchor, source.name, destination.name, source_info)
             else:
                 _rename_directory_checked_path(source, destination, source_info)
@@ -930,6 +934,7 @@ class _DirectoryOperations:
                 parent_fd=anchor.fd if anchor is not None else None,
             )
             if anchor is not None:
+                anchor.verify_path_still_names_anchor()
                 _rename_directory_checked(anchor, source.name, destination.name, source_info)
             else:
                 _rename_directory_checked_path(source, destination, source_info)
