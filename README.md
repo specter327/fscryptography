@@ -141,7 +141,12 @@ Al salir del bloque, `close()` invalida el gestor y libera sus referencias al ma
 ```python
 from pathlib import Path
 
-with fscryptography.Manager(key=master_key) as manager:
+password = obtain_password_from_secure_input()
+
+with fscryptography.Manager(
+    key=master_key,
+    password=password,
+) as manager:
     # Salida predeterminada: reporte.fscrypt
     manager.file.encrypt(Path("reporte.txt"))
 
@@ -169,7 +174,12 @@ Parámetros:
 Para cifrar también el nombre:
 
 ```python
-with fscryptography.Manager(key=master_key) as manager:
+password = obtain_password_from_secure_input()
+
+with fscryptography.Manager(
+    key=master_key,
+    password=password,
+) as manager:
     manager.file.encrypt(
         "informe-confidencial.txt",
         encrypt_name=True,
@@ -181,7 +191,12 @@ Cuando `encrypt_name=True`, no se puede especificar `new_extension`: el nombre c
 ### 5. Descifrar archivos
 
 ```python
-with fscryptography.Manager(key=master_key) as manager:
+password = obtain_password_from_secure_input()
+
+with fscryptography.Manager(
+    key=master_key,
+    password=password,
+) as manager:
     manager.file.decrypt("reporte.fscrypt")
 ```
 
@@ -198,7 +213,12 @@ from pathlib import Path
 
 directory = Path("proyecto-privado")
 
-with fscryptography.Manager(key=master_key) as manager:
+password = obtain_password_from_secure_input()
+
+with fscryptography.Manager(
+    key=master_key,
+    password=password,
+) as manager:
     # Captura las entradas existentes antes de la transformación.
     # Ejecuta este ejemplo sin modificaciones concurrentes en el padre.
     parent = directory.parent
@@ -232,8 +252,12 @@ Para proteger el contenido de un árbol de directorios, cada archivo debe proces
 
 ```python
 new_key = fscryptography.generate()
+current_password = obtain_password_from_secure_input()
 
-with fscryptography.Manager(key=master_key) as manager:
+with fscryptography.Manager(
+    key=master_key,
+    password=current_password,
+) as manager:
     manager.change_key(new_key)
 
     exported_key: str = manager.export_key()
