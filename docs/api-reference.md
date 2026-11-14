@@ -98,7 +98,7 @@ Implementado:
 
 Pendiente:
 - Validación específica en Windows 11 cliente y ampliación de escenarios de interrupción abrupta en Windows.
-- Fuzzing/property-based de parsers y revisión de seguridad independiente.
+- Fuzzing de larga duración y revisión de seguridad independiente. Las pruebas property-based acotadas de parsers ya están implementadas; no equivalen a fuzzing prolongado.
 
 
 ## Concurrencia y ciclo de vida
