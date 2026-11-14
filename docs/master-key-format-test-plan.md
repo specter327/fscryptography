@@ -12,7 +12,12 @@ Las pruebas se dividirán entre:
 
 ## Fixtures y vectores
 
-Se mantienen dos capas separadas de vectores golden:\n\n- `master_key_v1_vectors.json` + `test_master_key_format_vectors.py`: vectores estructurales del contenedor. Sus keysets son marcadores sintéticos opacos y no son Protobuf Tink válido; los parámetros Argon2id son deliberadamente modestos y exclusivos de esa suite estructural.\n- `master_key_tink_v1_vectors.json` + `test_master_key_tink_vectors.py`: contenedores completos con keysets Tink Protobuf válidos e independientes del generador/parser productivo. Incluyen `AES256_GCM_HKDF_1MB` para contenido (`RAW`) y `AES256_GCM` para nombres (`TINK`), con material determinista exclusivo de pruebas. Incluyen un contenedor aleatorio y uno protegido con el perfil Argon2id productivo (64 MiB / 3 / p=1), además de variantes inválidas con primitive intercambiado y Protobuf malformado. Los tests abren los contenedores mediante `open_master_key()` y ejercitan ambos primitives restaurados.\n\nLos bytes de estas fixtures son vectores de conformidad de pruebas; nunca deben reutilizarse como claves de producción.
+Se mantienen dos capas separadas de vectores golden:
+
+- `master_key_v1_vectors.json` + `test_master_key_format_vectors.py`: vectores estructurales del contenedor. Sus keysets son marcadores sintéticos opacos y no son Protobuf Tink válido; los parámetros Argon2id son deliberadamente modestos y exclusivos de esa suite estructural.
+- `master_key_tink_v1_vectors.json` + `test_master_key_tink_vectors.py`: contenedores completos con keysets Tink Protobuf válidos e independientes del generador/parser productivo. Incluyen `AES256_GCM_HKDF_1MB` para contenido (`RAW`) y `AES256_GCM` para nombres (`TINK`), con material determinista exclusivo de pruebas. Incluyen un contenedor aleatorio y uno protegido con el perfil Argon2id productivo (64 MiB / 3 / p=1), además de variantes inválidas con primitive intercambiado y Protobuf malformado. Los tests abren los contenedores mediante `open_master_key()` y ejercitan ambos primitives restaurados.
+
+Los bytes de estas fixtures son vectores de conformidad de pruebas; nunca deben reutilizarse como claves de producción.
 
 La suite deberá ampliar y mantener vectores golden independientes de la implementación:
 - Contenedor aleatorio v1 válido con dos keysets de prueba válidos.
