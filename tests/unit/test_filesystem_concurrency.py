@@ -182,7 +182,7 @@ def test_windows_encrypt_rejects_source_mutation_between_streaming_and_retiremen
         if (
             not mutated
             and os.fspath(src) == os.fspath(source)
-            and os.fspath(dst).startswith(".fscryptography-source-")
+            and os.path.basename(os.fspath(dst)).startswith(".fscryptography-source-")
         ):
             source.write_bytes(original_payload + b" changed after streaming")
             mutated = True
