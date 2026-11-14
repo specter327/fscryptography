@@ -145,7 +145,7 @@ Antes de publicar soporte v1 se debe:
 - [x] Medir nombres GNU/Linux en bytes UTF-8 y nombres Windows en unidades UTF-16; probar round-trip Unicode en la matriz de filesystem.
 - [x] Definir el contrato `str`/`os.PathLike[str]` y rechazar `PathLike[bytes]`.
 - [x] Añadir round-trip de filesystem con rutas largas, incluida una ruta Windows superior a MAX_PATH cuando el runner la soporta.
-- [ ] Ejecutar la matriz integral de filesystem específicamente en Windows 11 cliente; Windows Server 2025 no sustituye esa validación.
+- [ ] Ejecutar la matriz integral de filesystem específicamente en Windows 11 cliente; Windows Server 2025 no sustituye esa validación. Procedimiento reproducible: [Validación manual en Windows 11](windows-11-validation.md).
 - [x] Declarar rangos runtime de dependencias y metadatos de empaquetado en `pyproject.toml`; la validación CI de versiones mínimas está cubierta. La validación de límites superiores y de futuras actualizaciones debe repetirse al modificar los rangos.
 - [ ] Declarar soporte únicamente después de que todas las pruebas requeridas pasen.
 
