@@ -2,6 +2,8 @@
 
 ## Requisitos de distribución
 
+El historial público de cambios vive en [CHANGELOG.md](../CHANGELOG.md); las reglas de compatibilidad de API y formatos viven en [versioning.md](versioning.md).
+
 El proyecto usa el backend PEP 517 de setuptools y el layout `src/`. El nombre de distribución y el nombre importable son ambos `fscryptography`.
 
 - Wheel: `fscryptography-<version>-py3-none-any.whl`.
@@ -69,7 +71,7 @@ Para el primer registro del nombre en PyPI, configura un **pending publisher** s
 
 1. Confirmar que el titular y el aviso de copyright de `LICENSE` son correctos para la titularidad legal del proyecto.
 2. Actualizar `project.version` en `pyproject.toml` y `__version__` en `src/fscryptography/__init__.py` al mismo valor.
-3. Actualizar notas de versión y validar el cambio mediante CI.
+3. Actualizar CHANGELOG.md y las notas de versión; comprobar que API y formatos cumplen la política de versionado; validar el cambio mediante CI.
 4. Crear una etiqueta anotada `vX.Y.Z` que apunte al commit integrado.
 5. Crear un GitHub Release marcado como pre-release para publicar en TestPyPI.
 6. Verificar instalación, metadatos, wheel/sdist y funcionamiento desde TestPyPI en un entorno limpio.

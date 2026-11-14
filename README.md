@@ -34,7 +34,7 @@ No es un filesystem virtual, un gestor de secretos ni una herramienta de cifrado
 - **Contexto reutilizable:** `Manager` abre las primitivas una vez y las reutiliza durante las operaciones.
 - **Publicación sin sobrescritura:** evita reemplazar destinos existentes de forma accidental.
 - **Errores tipados:** excepciones propias con una jerarquía pública, preservando errores estándar del filesystem cuando corresponde.
-- **Inspección de transacciones:** diagnóstico de solo lectura de registros de operaciones interrumpidas.
+- **Estado transaccional en memoria:** no crea journals ni directorios de recuperación persistentes.
 
 ## Instalación
 
@@ -235,6 +235,8 @@ with fscryptography.Manager(key=master_key) as manager:
     exported_key: str = manager.export_key()
 ```
 
+**Importante:** `change_key()` solo cambia la clave utilizada por operaciones nuevas. No vuelve a cifrar archivos existentes ni migra sus nombres. Cada recurso sigue requiriendo la MasterKey con la que fue cifrado; conserva las claves anteriores mientras existan recursos que dependan de ellas.
+
 Para cambiar a un contenedor protegido por contraseña:
 
 ```python
@@ -249,19 +251,16 @@ with fscryptography.Manager(key=master_key) as manager:
 
 `export_key()` devuelve la MasterKey activa en Base64 estándar. Trata el valor exportado como un secreto de máxima sensibilidad.
 
-### 8. Inspeccionar registros de recuperación
+### 8. Comportamiento ante interrupciones
 
-`inspect_recovery(parent)` permite consultar registros de transacciones bajo un directorio padre:
+El estado transaccional existe únicamente en memoria durante la operación. La librería no crea journals, directorios de transacción ni ofrece inspección o recuperación automática después de una interrupción.
 
-```python
-with fscryptography.Manager(key=master_key) as manager:
-    records = manager.inspect_recovery("/ruta/al/directorio")
+Para procesar archivos grandes mediante streaming se utilizan temporales de resultado en el mismo directorio padre. La retirada segura del origen utiliza temporalmente un nombre hermano aleatorio. Si el proceso termina abruptamente o el equipo pierde energía, estos elementos pueden quedar en el filesystem; no existe un mecanismo de recuperación que los identifique, valide o elimine automáticamente. El consumidor debe inspeccionar el directorio y determinar manualmente qué conservar o eliminar. No borres un temporal sin verificar primero su contenido e identidad.
 
-    for record in records:
-        print(record)
-```
+En ejecución normal, la limpieza de temporales de resultado se intenta al cerrar la operación. Un fallo de retirada del origen puede dejar un temporal hermano que contiene el recurso original; el resultado publicado también puede permanecer. Conserva backups y no interpretes la presencia de ambos archivos como una transacción recuperable.
 
-La inspección es de solo lectura. No descifra, restaura, elimina ni resuelve transacciones. Una clasificación de estado no autoriza por sí misma a modificar o borrar recursos. Conserva los registros y archivos asociados hasta realizar una evaluación explícita.
+fscryptography no promete rollback, recuperación tras crash ni ausencia absoluta de residuos en apagones.
+
 
 ### 9. Excepciones
 
@@ -281,7 +280,6 @@ Las excepciones propias se exportan desde el paquete raíz y derivan de `FsCrypt
 | `BackendError` | Fallo inesperado de integración criptográfica. |
 | `ClosedInstanceError` | Se intentó usar un gestor cerrado. |
 | `AtomicOperationError` | No se pudo asegurar el estado esperado durante la operación. |
-| `RecoveryError` | Falló también la recuperación o rollback. |
 
 Los errores ordinarios del sistema de archivos pueden conservar excepciones estándar como `FileNotFoundError`, `FileExistsError`, `PermissionError` y `OSError`. Los errores de argumentos pueden ser `TypeError` o `ValueError`.
 
@@ -359,6 +357,8 @@ Esta librería manipula claves criptográficas y recursos del usuario. Antes de 
 La documentación normativa y de diseño se mantiene separada del manual de uso:
 
 - [Índice de documentación](docs/index.md)
+- [Versionado y compatibilidad](docs/versioning.md)
+- [Historial de cambios](CHANGELOG.md)
 - [Contrato de API](docs/api-reference.md)
 - [Arquitectura](docs/architecture.md)
 - [Diseño criptográfico](docs/cryptographic-design.md)
@@ -367,8 +367,7 @@ La documentación normativa y de diseño se mantiene separada del manual de uso:
 - [Gestión de claves](docs/key-management.md)
 - [Política Argon2id](docs/argon2id-policy.md)
 - [Cifrado de nombres](docs/filename-encryption.md)
-- [Operaciones atómicas](docs/atomic-operations.md)
-- [Journal y recuperación](docs/recovery-journal.md)
+- [Operaciones transaccionales y límites ante interrupciones](docs/atomic-operations.md)
 - [Errores y excepciones](docs/errors.md)
 - [Modelo de seguridad](docs/security-model.md)
 - [Política de seguridad y reporte de vulnerabilidades](SECURITY.md)

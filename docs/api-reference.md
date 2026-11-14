@@ -42,7 +42,7 @@ Si el contenedor fue generado con password=..., la contraseña debe suministrars
 
     exported_key: str = manager.export_key()
 
-change_key() valida y abre completamente la nueva clave antes de sustituir el contexto activo. Si falla, el contexto anterior permanece intacto. export_key() devuelve la representación Base64 canónica de la clave activa.
+change_key() valida y abre completamente la nueva clave antes de sustituir el contexto activo. Si falla, el contexto anterior permanece intacto. export_key() devuelve la representación Base64 canónica de la clave activa. change_key() no vuelve a cifrar archivos existentes ni actualiza sus keysets: los recursos cifrados con una MasterKey anterior siguen requiriendo esa MasterKey para descifrarse. Conserva cada clave mientras existan recursos que dependan de ella.
 
 ## Operaciones sobre recursos
 
@@ -81,13 +81,9 @@ Todas las excepciones propias derivan de FsCryptographyError. La jerarquía, la 
 
 Los errores de argumentos conservan TypeError o ValueError; los errores ordinarios del filesystem conservan las excepciones estándar de Python cuando sea posible. La contraseña incorrecta y la alteración de un contenedor protegido se presentan como AuthenticationError, sin distinguir públicamente ambos casos.
 
-## Inspección de operaciones interrumpidas
+## Estado transaccional y fallos abruptos
 
-    records = manager.inspect_recovery("/path/to/parent")
-
-La llamada inspecciona exclusivamente los directorios `.fscryptography-txn-*` situados directamente bajo el directorio indicado. Devuelve una tupla inmutable de objetos `fscryptography.RecoveryRecord`. Las clasificaciones incluyen `prepared_no_output`, `result_incomplete_or_unverified`, `result_ready`, `published_source_present`, `published_source_missing`, `source_removed`, `ambiguous` y `corrupt`.
-
-La inspección es de solo lectura y no requiere una clave abierta: no descifra ni autentica contenido. Los registros completados se conservan como evidencia; no hay limpieza automática ni resolución destructiva. Una clasificación nunca autoriza por sí sola a borrar, restaurar o reemplazar recursos.
+El estado transaccional se mantiene exclusivamente en memoria. No existe Manager.inspect_recovery(), RecoveryRecord ni API de recuperación. Los temporales de resultado y de staging del origen son entradas hermanas efímeras del directorio padre; una terminación abrupta puede dejarlas atrás. La librería no realiza recuperación, clasificación ni limpieza automática en una ejecución posterior.
 
 ## Estado de implementación
 
@@ -102,9 +98,7 @@ Implementado:
 
 Pendiente:
 - Validación específica en Windows 11 cliente y ampliación de escenarios de interrupción abrupta en Windows.
-- Política segura de retención/limpieza de journals completados.
-- API separada de resolución explícita; no forma parte de esta versión.
-- Fuzzing/property-based de parsers y revisión de seguridad independiente.
+- Fuzzing de larga duración y revisión de seguridad independiente. Las pruebas property-based acotadas de parsers ya están implementadas; no equivalen a fuzzing prolongado.
 
 
 ## Concurrencia y ciclo de vida
@@ -114,6 +108,6 @@ Un Manager puede atender operaciones concurrentes sobre recursos independientes.
 - change_key() sustituye atómicamente el contexto para operaciones que comiencen después del cambio.
 - Una operación ya iniciada termina con la generación de claves que capturó, aunque change_key() se ejecute mientras procesa el recurso.
 - close() impide iniciar nuevas operaciones y libera la referencia del gestor al contexto; no cancela operaciones que ya capturaron una instantánea.
-- Dos operaciones que compiten sobre el mismo origen no se consideran una operación concurrente válida: la publicación y retirada transaccional permiten que solo una gane de forma segura.
+- Dos operaciones que compiten sobre el mismo origen no constituyen una operación concurrente coordinada. Con un destino determinista, normalmente compiten por el mismo nombre y solo una puede publicarlo. Con `encrypt_name=True`, cada operación genera un nombre cifrado aleatorio distinto: ambas pueden publicar ciphertexts válidos antes de competir por retirar el origen; una puede completar y la otra fallar, dejando un segundo ciphertext publicado. La librería no elimina automáticamente ese resultado duplicado.
 - close() no garantiza borrado seguro de memoria ni revocación de copias de primitivas ya retenidas por operaciones en curso.
 

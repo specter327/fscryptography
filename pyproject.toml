@@ -37,10 +37,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=8,<9"]
+test = ["pytest>=8,<9", "hypothesis>=6.100,<7"]
 dev = [
     "build>=1.2,<2",
     "pytest>=8,<9",
+    "hypothesis>=6.100,<7",
     "twine>=5,<7",
 ]
 
@@ -49,7 +50,7 @@ Homepage = "https://github.com/specter327/fscryptography"
 Repository = "https://github.com/specter327/fscryptography"
 Documentation = "https://github.com/specter327/fscryptography/tree/main/docs"
 Issues = "https://github.com/specter327/fscryptography/issues"
-Changelog = "https://github.com/specter327/fscryptography/releases"
+Changelog = "https://github.com/specter327/fscryptography/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 include-package-data = true

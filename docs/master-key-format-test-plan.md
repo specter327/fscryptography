@@ -12,15 +12,14 @@ Las pruebas se dividirán entre:
 
 ## Fixtures y vectores
 
-Se incorporaron vectores golden iniciales en `tests/master_key_format/fixtures/master_key_v1_vectors.json` y pruebas ejecutables en `tests/master_key_format/test_master_key_format_vectors.py`. Los vectores son independientes de cualquier parser productivo. Los bytes de keyset son marcadores sintéticos opacos y no son Protobuf Tink válido; los parámetros Argon2id son deliberadamente modestos y exclusivos de pruebas.
+Se mantienen dos capas separadas de vectores golden:
 
-La suite deberá ampliar y mantener vectores golden independientes de la implementación:
-- Contenedor aleatorio v1 válido con dos keysets de prueba válidos.
-- Contenedor protegido v1 válido con parámetros KDF de fixture deliberadamente modestos, nunca reutilizados como configuración de producción.
-- Cabeceras válidas de ambos modos con sus bytes AAD exactos.
-- Casos inválidos con un solo campo alterado para identificar el rechazo esperado.
+- `master_key_v1_vectors.json` + `test_master_key_format_vectors.py`: vectores estructurales del contenedor. Sus keysets son marcadores sintéticos opacos y no son Protobuf Tink válido; los parámetros Argon2id son deliberadamente modestos y exclusivos de esa suite estructural.
+- `master_key_tink_v1_vectors.json` + `test_master_key_tink_vectors.py`: contenedores completos con keysets Tink Protobuf válidos e independientes del generador/parser productivo. Incluyen `AES256_GCM_HKDF_1MB` para contenido (`RAW`) y `AES256_GCM` para nombres (`TINK`), con material determinista exclusivo de pruebas. Incluyen un contenedor aleatorio y uno protegido con el perfil Argon2id productivo (64 MiB / 3 / p=1), además de variantes inválidas con primitive intercambiado y Protobuf malformado. Los tests abren los contenedores mediante `open_master_key()` y ejercitan ambos primitives restaurados.
 
-Los fixtures criptográficos deben ser reproducibles. La generación aleatoria de producción no debe sustituirse por valores deterministas; las fixtures solo pertenecen al entorno de pruebas.
+Los bytes de estas fixtures son vectores de conformidad de pruebas; nunca deben reutilizarse como claves de producción.
+
+La suite Tink cubre ahora los vectores independientes requeridos: contenedor aleatorio y protegido, keysets válidos de ambos primitives, rechazo de primitive incorrecto y rechazo de Protobuf malformado. La suite estructural sintética permanece separada y usa parámetros Argon2id deliberadamente modestos; esos fixtures no se aceptan por el parser productivo.
 
 ## Matriz de conformidad estructural
 
@@ -75,7 +74,7 @@ Los fixtures criptográficos deben ser reproducibles. La generación aleatoria d
 - Confirmar que una apertura fallida no entrega el primer keyset si falla el segundo.
 - No usar un formato de keyset propio ni exponer keysets a la API pública.
 
-El perfil Tink `AES256_GCM` y el keyset `Aead` ya pasaron la prueba de backend en CI. La integración productiva genera y restaura ambos keysets Tink dentro del MasterKey; las pruebas unitarias verifican la recuperación y el uso del primitive AEAD de nombres. La ampliación de vectores golden y pruebas adversariales sigue pendiente.
+El perfil Tink `AES256_GCM` y el keyset `Aead` ya pasaron la prueba de backend en CI. La integración productiva genera y restaura ambos keysets Tink dentro del MasterKey. La nueva suite de vectores golden ejercita la apertura productiva de ambos keysets, su uso criptográfico y el rechazo de keysets inválidos o de primitive incorrecto; pasó en los tres runtimes Python de la matriz de pruebas del paquete.
 
 ## Propiedades y fuzzing
 
@@ -94,15 +93,15 @@ La fase de especificación del formato se considera cerrada cuando:
 1. [x] Se aprueba el layout binario v1 y sus límites.
 2. [x] Se ejecuta el benchmark de referencia y se aprueba el perfil Argon2id v1 (64 MiB / 3 / p=1), junto con los límites normativos de entrada y contraseña de [la política de Argon2id](argon2id-policy.md).
 3. [~] Se valida el perfil AEAD de nombres Tink `AES256_GCM` y el tipo `Aead`; se aprobaron `~1` + Base64URL sin padding y el límite de 156 bytes UTF-8 para componentes de 255 bytes. La validación sobre filesystems objetivo sigue pendiente.
-4. [~] Se publican vectores golden iniciales de estructura y envoltura; faltan vectores de keysets Tink válidos e inválidos.
+4. [x] Se publican vectores golden estructurales y vectores independientes con keysets Tink válidos e inválidos; la suite productiva pasó en Python 3.11, 3.12 y 3.13.
 5. [x] Se acuerda el catálogo de errores de parsing/autenticación en docs/errors.md.
 6. [x] Se define la matriz de plataformas objetivo en docs/platform-compatibility.md.
 
 La política de producción aprobada para v1 utiliza Argon2id v19 con 64 MiB, 3 iteraciones y paralelismo 1; exige aceptación estricta del perfil antes de ejecutar la KDF. Los valores de fixtures de bajo coste no deben ser aceptados por el parser productivo. Los límites de entrada y contraseña están aprobados contractualmente; véase [Política de Argon2id y límites de apertura](argon2id-policy.md).
 
-El parser/generador productivo MasterKey v1.0 y la fachada pública `Crypto` están implementados. Las operaciones funcionales de archivos/directorios permanecen pendientes; el formato de archivo continúa en propuesta hasta cerrar la semántica de extensión y el contrato de `new_extension`.
+El parser/generador productivo MasterKey v1.0 y la fachada pública están implementados. La cobertura productiva y sus límites se describen en el estado de ejecución.
 
 
 ## Estado de ejecución
 
-Las pruebas de `tests/master_key_format/test_master_key_format_vectors.py` siguen validando el layout aprobado mediante un verificador exclusivo de pruebas. El parser productivo se encuentra en `src/fscryptography/_master_key.py` y genera/restaura keysets Tink reales. El vector protegido sintético usa Argon2id con coste deliberadamente bajo para que la prueba sea rápida; nunca debe reutilizarse en producción.
+Las pruebas de `tests/master_key_format/test_master_key_format_vectors.py` validan el layout aprobado mediante un verificador exclusivo de pruebas y fixtures sintéticas. La nueva suite `tests/master_key_format/test_master_key_tink_vectors.py` abre contenedores golden con keysets Tink Protobuf válidos mediante el parser productivo y prueba ambos primitives; incluye variantes inválidas por primitive incorrecto y Protobuf malformado. El parser productivo de `src/fscryptography/_master_key.py` también genera y restaura keysets Tink reales. `tests/unit/test_master_key.py` cubre la integración productiva: generación y apertura en ambos modos, uso de la primitiva AEAD de nombres, contraseña incorrecta, alteración del payload, Base64 canónico, límites de contraseña y rechazo de cada campo del perfil Argon2id no admitido antes de ejecutar la KDF, además del rechazo de contraseñas UTF-8 fuera de límite. El control de concurrencia/admisión de aperturas protegidas corresponde a la aplicación integradora; la librería no implementa un limitador interno. Los vectores sintéticos de estructura usan Argon2id de bajo coste y keysets opacos no válidos; nunca deben aceptarse como contenedores productivos.

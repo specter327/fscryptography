@@ -118,7 +118,7 @@ Cada combinación objetivo de sistema operativo, Python y filesystem debe cubrir
 8. Enlaces simbólicos, hard links y tipos de recurso no admitidos.
 9. Fallos inducidos durante escritura temporal, cierre/autenticación, publicación, rename y limpieza.
 10. Verificación de que el original permanece intacto ante errores y que no se publica plaintext parcial.
-11. Temporales huérfanos y fallos de rollback/recuperación.
+11. Residuos temporales tras terminación abrupta; comprobar el estado observable y documentar que no existe rollback ni recuperación automática.
 12. Límites de ruta y componente reales del filesystem probado.
 
 Los resultados de `real-filesystem-integration.yml` registran OS/build, arquitectura, versión exacta de Python, versiones de fscryptography/Tink/argon2-cffi/cryptography/pytest y filesystem con opciones relevantes de montaje. El runner Windows de GitHub es evidencia de comportamiento NTFS en ese entorno, no una prueba equivalente a Windows 11 cliente. Un resultado de una combinación no se extrapola a otra.
@@ -140,12 +140,13 @@ Antes de publicar soporte v1 se debe:
 - [x] Definir una matriz objetivo inicial: Windows 11 y Ubuntu 22.04/24.04 LTS, x86-64, CPython 3.11–3.13, NTFS/ext4.
 - [x] Separar evidencia de backend criptográfico de validación integral de filesystem.
 - [x] Definir contrato de nombres reservados Windows, UTF-8 estricto y semántica de equivalencia/casefold por filesystem.
-- [x] Configurar CI de backend criptográfico en Windows para CPython 3.11–3.13 (pendiente de una ejecución verde antes de considerar validado el entorno).
-- [ ] Ejecutar pruebas integrales de filesystem en NTFS y ext4 y confirmar el tipo real del volumen en los logs de CI.
+- [x] Ejecutar CI de backend criptográfico en Windows y GNU/Linux para CPython 3.11–3.13; la matriz documentada terminó correctamente. Esta evidencia no sustituye la integración real de filesystem.
+- [x] Ejecutar pruebas integrales de filesystem sobre ext4 y NTFS en runners representativos y registrar el tipo real del volumen: Ubuntu 22.04/24.04 y Windows Server 2025.
 - [x] Medir nombres GNU/Linux en bytes UTF-8 y nombres Windows en unidades UTF-16; probar round-trip Unicode en la matriz de filesystem.
 - [x] Definir el contrato `str`/`os.PathLike[str]` y rechazar `PathLike[bytes]`.
 - [x] Añadir round-trip de filesystem con rutas largas, incluida una ruta Windows superior a MAX_PATH cuando el runner la soporta.
-- [ ] Fijar rangos runtime de dependencias y metadatos de empaquetado.
+- [ ] Ejecutar la matriz integral de filesystem específicamente en Windows 11 cliente; Windows Server 2025 no sustituye esa validación. Procedimiento reproducible: [Validación manual en Windows 11](windows-11-validation.md).
+- [x] Declarar rangos runtime de dependencias y metadatos de empaquetado en `pyproject.toml`; la validación CI de versiones mínimas está cubierta. La validación de límites superiores y de futuras actualizaciones debe repetirse al modificar los rangos.
 - [ ] Declarar soporte únicamente después de que todas las pruebas requeridas pasen.
 
 

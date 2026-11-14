@@ -29,7 +29,7 @@ from .file_format import (
     split_extension,
 )
 from .names import NameProfile, decrypt_name, encrypt_name, validate_name
-from ._journal import Transaction
+from ._transaction import Transaction
 from ._directory import DirectoryAnchor, _renameat2
 
 _CHUNK_SIZE = 1024 * 1024
@@ -110,7 +110,7 @@ def _validate_component(name: str, parent: Path) -> None:
 
 def _publish_noreplace(source: Path, destination: Path) -> None:
     """Atomically rename within one filesystem without replacing a destination."""
-    # Transaction results live in a private sibling directory on the same filesystem.
+    # Transaction results live in an exclusive temporary sibling on the same filesystem.
     if os.name == "nt":
         try:
             os.rename(source, destination)
@@ -181,15 +181,54 @@ def _check_source(path: Path, *, directory: bool) -> os.stat_result:
 def _open_source(path: Path, expected: os.stat_result) -> BinaryIO:
     """Open the previously inspected regular file without following symlinks.
 
-    O_NOFOLLOW closes the lstat/open symlink substitution window on Linux.
+    GNU/Linux uses O_NOFOLLOW. Windows opens the file with FILE_SHARE_DELETE
+    so another operation can atomically stage the source after its own handle
+    has closed, even while competing readers still hold compatible handles.
     The descriptor identity is checked again after open on every platform.
     The returned stream owns the descriptor.
     """
-    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags)
+    if os.name == "nt":
+        import msvcrt
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateFileW.argtypes = (
+            wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+            wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
+        )
+        kernel32.CreateFileW.restype = wintypes.HANDLE
+        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        kernel32.CloseHandle.restype = wintypes.BOOL
+
+        # GENERIC_READ; share read/write/delete; OPEN_EXISTING;
+        # OPEN_REPARSE_POINT prevents following a substituted reparse point.
+        handle = kernel32.CreateFileW(
+            str(path),
+            0x80000000,
+            0x00000001 | 0x00000002 | 0x00000004,
+            None,
+            3,
+            0x00200000,
+            None,
+        )
+        invalid_handle = ctypes.c_void_p(-1).value
+        if handle == invalid_handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            descriptor = msvcrt.open_osfhandle(
+                int(handle), os.O_RDONLY | getattr(os, "O_BINARY", 0)
+            )
+            handle = None  # The CRT descriptor now owns the native handle.
+        finally:
+            if handle not in (None, invalid_handle):
+                kernel32.CloseHandle(handle)
+    else:
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags)
+
     try:
         current = os.fstat(descriptor)
-        if not stat.S_ISREG(current.st_mode):
+        if not stat.S_ISREG(current.st_mode) or _is_reparse_point(current):
             raise UnsupportedResourceError("resource is not a regular file")
         if current.st_nlink != 1:
             raise UnsupportedResourceError(
@@ -263,6 +302,46 @@ def _rename_directory_checked(
             raise
         raise AtomicOperationError("directory rename failed verification; original entry was restored") from exc
 
+
+def _rename_directory_checked_path(
+    source: Path,
+    destination: Path,
+    expected: os.stat_result,
+) -> None:
+    """Windows path-based directory rename with post-rename identity verification.
+
+    Windows os.rename refuses an existing destination. If a competing process
+    substitutes the source between inspection and rename, restore the moved
+    entry without overwriting a newly-created source path.
+    """
+    try:
+        os.rename(source, destination)
+    except FileExistsError as exc:
+        raise DestinationConflictError("destination already exists") from exc
+    except OSError as exc:
+        raise AtomicOperationError("Windows directory rename failed") from exc
+
+    try:
+        moved = destination.lstat()
+        if (
+            not stat.S_ISDIR(moved.st_mode)
+            or _is_reparse_point(moved)
+            or (moved.st_dev, moved.st_ino) != (expected.st_dev, expected.st_ino)
+        ):
+            raise InvalidPathError("directory identity changed before rename")
+    except BaseException as exc:
+        try:
+            os.rename(destination, source)
+        except BaseException as restore_error:
+            raise AtomicOperationError(
+                "directory identity changed during rename; the moved entry could not be restored safely"
+            ) from restore_error
+        if isinstance(exc, InvalidPathError):
+            raise
+        raise AtomicOperationError(
+            "directory rename failed verification; original entry was restored"
+        ) from exc
+
 def _read_exact(stream: BinaryIO, size: int) -> bytes:
     chunks = bytearray()
     while len(chunks) < size:
@@ -279,6 +358,27 @@ def _read_header(stream: BinaryIO):
     if header_length < FIXED_HEADER_SIZE or header_length > MAX_HEADER_SIZE:
         raise FormatError("file header length is outside supported limits")
     return parse_header(fixed + _read_exact(stream, header_length - FIXED_HEADER_SIZE))
+
+
+
+def _source_snapshot(info: os.stat_result) -> tuple[int, int, int, int, int]:
+    """Return stable source metadata that survives a same-directory rename.
+
+    ctime is intentionally excluded because the staging rename itself may
+    update it. Identity, link count, size, and mtime still detect ordinary
+    same-object writes between streaming and source retirement.
+    """
+    return (
+        info.st_dev,
+        info.st_ino,
+        info.st_nlink,
+        info.st_size,
+        getattr(info, "st_mtime_ns", int(info.st_mtime * 1_000_000_000)),
+    )
+
+
+def _matches_source_snapshot(current: os.stat_result, expected: os.stat_result) -> bool:
+    return _source_snapshot(current) == _source_snapshot(expected)
 
 
 def _assert_source_unchanged(stream: BinaryIO, expected: os.stat_result) -> None:
@@ -467,9 +567,7 @@ def _windows_delete_file_by_identity(path: Path, expected: os.stat_result) -> No
         )
         handle = None  # descriptor now owns the native handle
         current = os.fstat(descriptor)
-        if not stat.S_ISREG(current.st_mode) or (
-            current.st_dev, current.st_ino
-        ) != (expected.st_dev, expected.st_ino):
+        if not stat.S_ISREG(current.st_mode) or not _matches_source_snapshot(current, expected):
             raise AtomicOperationError(
                 "quarantined source identity changed; no file was deleted"
             )
@@ -491,15 +589,13 @@ def _retire_source(
     *,
     output_kind: str,
 ) -> None:
-    """Move the expected source into private transaction storage before unlinking.
+    """Move the expected source into private temporary sibling storage before unlinking.
 
-    The quarantine entry is deliberately inside the journaled transaction
-    directory, so an interrupted retirement remains visible to recovery
-    inspection. The identity check is performed after the atomic rename.
+    The source is staged under a random sibling name. The identity check is performed after the atomic rename; abrupt termination can leave that sibling behind.
     """
     if anchor is None:
         # Windows has no Python-level unlink-if-this-file-identity primitive.
-        # First move the entry into the journaled transaction directory. If a
+        # First move the entry into the parent directory under a random sibling name. If a
         # competing process substituted it before the rename, the post-rename
         # identity check detects that and restores the entry without deleting it.
         retained = transaction.retained_path
@@ -507,7 +603,7 @@ def _retire_source(
             os.rename(source_path, retained)  # Windows rename does not replace an existing target.
         except Exception as exc:
             raise AtomicOperationError(
-                f"{output_kind} was published but the source could not be quarantined safely"
+                f"{output_kind} was published but the source could not be staged safely"
             ) from exc
 
         try:
@@ -515,18 +611,17 @@ def _retire_source(
             if (
                 not stat.S_ISREG(moved.st_mode)
                 or _is_reparse_point(moved)
-                or moved.st_nlink != 1
-                or (moved.st_dev, moved.st_ino) != (expected.st_dev, expected.st_ino)
+                or not _matches_source_snapshot(moved, expected)
             ):
                 try:
                     os.rename(retained, source_path)  # Fails rather than replacing a new source entry.
                 except Exception as restore_error:
                     raise AtomicOperationError(
-                        "source identity changed; the unexpected entry remains in transaction storage "
-                        "for explicit recovery inspection"
+                        "source identity changed; the unexpected entry remains in temporary sibling storage "
+                        "for manual inspection"
                     ) from restore_error
                 raise AtomicOperationError(
-                    "source identity changed during quarantine; the unexpected entry was restored"
+                    "source identity changed during staging; the unexpected entry was restored"
                 )
 
             transaction.set_state("source_retained")
@@ -537,40 +632,42 @@ def _retire_source(
             raise
         except Exception as exc:
             raise AtomicOperationError(
-                "published output remains available; source retirement is incomplete and requires inspection"
+                "published output remains available; source retirement is incomplete and requires manual inspection"
             ) from exc
 
     try:
         if transaction.directory_fd is None:
-            raise RuntimeError("anchored source retirement requires a transaction directory descriptor")
-        anchor.rename_noreplace(source_path.name, transaction.directory_fd, "source")
+            raise RuntimeError("anchored source retirement requires a parent directory descriptor")
+        anchor.verify_path_still_names_anchor()
+        anchor.rename_noreplace(source_path.name, transaction.directory_fd, transaction.retained_name)
+    except InvalidPathError:
+        raise
     except Exception as exc:
         raise AtomicOperationError(
             f"{output_kind} was published but the source could not be retained safely"
         ) from exc
 
     try:
-        current = os.stat("source", dir_fd=transaction.directory_fd, follow_symlinks=False)
+        current = os.stat(transaction.retained_name, dir_fd=transaction.directory_fd, follow_symlinks=False)
         if (
             not stat.S_ISREG(current.st_mode)
-            or current.st_nlink != 1
-            or (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino)
+            or not _matches_source_snapshot(current, expected)
         ):
             try:
-                _renameat2(transaction.directory_fd, "source", anchor.fd, source_path.name)
+                _renameat2(transaction.directory_fd, transaction.retained_name, anchor.fd, source_path.name)
                 anchor.sync()
                 os.fsync(transaction.directory_fd)
             except Exception as restore_error:
                 raise AtomicOperationError(
                     "source identity changed; the unexpected entry remains in transaction storage "
-                    "for explicit recovery inspection"
+                    "for manual inspection"
                 ) from restore_error
             raise AtomicOperationError(
                 "source identity changed before retirement; the unexpected source entry was restored"
             )
 
         # Persist both sides of the cross-directory rename before recording the
-        # retained state. A crash from this point is inspectable via txn/source.
+        # retained state. An abrupt termination from this point may leave the source under its temporary sibling name.
         anchor.sync()
         os.fsync(transaction.directory_fd)
         transaction.set_state("source_retained")
@@ -580,7 +677,7 @@ def _retire_source(
             os.fsync(transaction.directory_fd)
         except OSError as exc:
             raise AtomicOperationError(
-                "source was removed, but transaction storage could not be synchronized"
+                "source was removed, but parent directory could not be synchronized"
             ) from exc
         transaction.set_state("source_removed")
     except AtomicOperationError:
@@ -641,7 +738,7 @@ class _FileOperations:
                 raise ValueError("encrypted destination must differ from the source path")
 
             transaction = Transaction.begin(
-                source_path.parent, "file_encrypt", source_path.name, destination.name, source_info,
+                source_path.parent, "file_encrypt", source_path.name, destination.name,
                 parent_fd=anchor.fd if anchor is not None else None,
             )
 
@@ -667,17 +764,19 @@ class _FileOperations:
                 _sync_close(output)
             transaction.set_result_ready(transaction.stat_result())
             if anchor is not None:
+                anchor.verify_path_still_names_anchor()
                 transaction.rename_result_to(anchor.fd, destination.name)
                 anchor.sync()
             else:
                 _publish_noreplace(temporary, destination)
+                transaction.mark_result_published()
                 _sync_parent_directory(source_path.parent)
             published = True
             transaction.set_state("published")
             _retire_source(
                 source_path,
                 transaction,
-                source_info,
+                opened_info,
                 anchor,
                 output_kind="encrypted output",
             )
@@ -689,7 +788,7 @@ class _FileOperations:
             transaction.close()
             if anchor is not None:
                 anchor.close()
-            # An unpublished result is retained for explicit inspection.
+            # An unpublished result is removed on normal cleanup; abrupt termination may leave an orphaned temporary sibling.
 
     def decrypt(self, path: str | os.PathLike[str]) -> None:
         material = self._manager._require_open()
@@ -731,12 +830,10 @@ class _FileOperations:
                 if destination == source_path:
                     raise ValueError("decrypted destination must differ from the source path")
                 transaction = Transaction.begin(
-                    source_path.parent, "file_decrypt", source_path.name, destination.name, source_info,
+                    source_path.parent, "file_decrypt", source_path.name, destination.name,
                     parent_fd=anchor.fd if anchor is not None else None,
                 )
-                fd = (os.open("result", os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600, dir_fd=transaction.directory_fd)
-                      if transaction.directory_fd is not None else
-                      os.open(transaction.result_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600))
+                fd = transaction.open_result()
                 output = os.fdopen(fd, "wb")
                 _copy_decrypt(
                     material.content,
@@ -748,11 +845,13 @@ class _FileOperations:
                 _sync_close(output)
             transaction.set_result_ready(transaction.stat_result())
             if anchor is not None:
+                anchor.verify_path_still_names_anchor()
                 transaction.rename_result_to(anchor.fd, destination.name)
                 anchor.sync()
                 os.fsync(transaction.directory_fd)
             else:
                 _publish_noreplace(transaction.result_path, destination)
+                transaction.mark_result_published()
                 _sync_parent_directory(source_path.parent)
                 _sync_parent_directory(transaction.directory)
             published = True
@@ -760,7 +859,7 @@ class _FileOperations:
             _retire_source(
                 source_path,
                 transaction,
-                source_info,
+                opened_info,
                 anchor,
                 output_kind="plaintext",
             )
@@ -773,7 +872,7 @@ class _FileOperations:
                 transaction.close()
             if anchor is not None:
                 anchor.close()
-            # Unpublished output is retained for explicit inspection.
+            # Unpublished output is removed on normal cleanup; abrupt termination may leave an orphaned temporary sibling.
 
 
 class _DirectoryOperations:
@@ -797,13 +896,14 @@ class _DirectoryOperations:
             _validate_component(destination_name, source.parent)
             destination = source.with_name(destination_name)
             transaction = Transaction.begin(
-                source.parent, "dir_encrypt", source.name, destination.name, source_info,
+                source.parent, "dir_encrypt", source.name, destination.name,
                 parent_fd=anchor.fd if anchor is not None else None,
             )
             if anchor is not None:
+                anchor.verify_path_still_names_anchor()
                 _rename_directory_checked(anchor, source.name, destination.name, source_info)
             else:
-                _publish_noreplace(source, destination)
+                _rename_directory_checked_path(source, destination, source_info)
                 _sync_parent_directory(source.parent)
             transaction.set_state("published")
             transaction.set_state("source_removed")
@@ -832,14 +932,14 @@ class _DirectoryOperations:
             _validate_component(destination_name, source.parent)
             destination = source.with_name(destination_name)
             transaction = Transaction.begin(
-                source.parent, "dir_decrypt", source.name, destination.name, source_info,
+                source.parent, "dir_decrypt", source.name, destination.name,
                 parent_fd=anchor.fd if anchor is not None else None,
             )
             if anchor is not None:
-                anchor.rename_noreplace(source.name, anchor.fd, destination.name)
-                anchor.sync()
+                anchor.verify_path_still_names_anchor()
+                _rename_directory_checked(anchor, source.name, destination.name, source_info)
             else:
-                _publish_noreplace(source, destination)
+                _rename_directory_checked_path(source, destination, source_info)
                 _sync_parent_directory(source.parent)
             transaction.set_state("published")
             transaction.set_state("source_removed")
