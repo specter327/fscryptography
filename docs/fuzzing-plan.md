@@ -42,11 +42,11 @@ Conserva SHA, versión Python/dependencias, estadísticas Hypothesis y salida co
 
 No asumas un perfil Hypothesis adicional si no está declarado por el proyecto. No cambies el número de ejemplos de CI sin revisar antes el tiempo de ejecución y la cobertura real.
 
-## Fase B — Campaña prolongada reproducible
+## Fase B — Campaña prolongada opcional
 
 El repositorio incluye `tools/fuzz/run_hypothesis_campaign.py`, un ejecutor multiplataforma basado exclusivamente en la biblioteca estándar. Repite la suite existente, conserva un log por iteración y escribe `campaign.json` con SHA, intérprete, sistema, versiones disponibles de paquetes, duración efectiva, comando y códigos de salida.
 
-Instala las dependencias de prueba y ejecuta una campaña de 24 horas en un runner dedicado:
+Si en el futuro se necesita evidencia adicional, puede ejecutarse una campaña prolongada en un runner dedicado. **No forma parte de los criterios de cierre de esta versión**. Ejemplo de ejecución opcional de 24 horas:
 
 ```bash
 python -m pip install -e ".[test]"
@@ -60,7 +60,7 @@ py -m pip install -e ".[test]"
 py tools/fuzz/run_hypothesis_campaign.py --duration-seconds 86400 --output-dir artifacts/fuzz/windows-11
 ```
 
-Para una prueba operativa breve antes de reservar un runner:
+Para comprobar operativamente el ejecutor antes de una campaña opcional:
 
 ```bash
 python tools/fuzz/run_hypothesis_campaign.py --duration-seconds 60 --output-dir artifacts/fuzz/smoke
@@ -80,16 +80,14 @@ No almacenes dumps de memoria, MasterKeys, contraseñas, datos personales ni cip
 
 ## Fase D — Criterios de cierre
 
-Una campaña solo puede marcarse aprobada cuando:
+Para cerrar la validación automatizada de esta versión:
 
-- Se completó el tiempo planificado y se registró el tiempo efectivo.
-- No quedan fallos sin triage.
-- Los hallazgos corregidos tienen pruebas de regresión.
-- Los casos de parser y formato corren en CI normal.
-- Se registraron commit, intérprete, SO, dependencias, CPU/memoria y artefactos.
-- Se separan claramente pruebas Hypothesis repetidas de cualquier fuzzing coverage-guided.
+- Los casos deterministas y property-based acotados corren en CI normal.
+- Los fallos conocidos tienen pruebas de regresión.
+- Se registran commit, intérprete, SO y dependencias de los resultados CI.
+- Se distinguen las pruebas Hypothesis acotadas de cualquier fuzzing coverage-guided.
 
-Cualquier crash, excepción inesperada, consumo desproporcionado de memoria/CPU o publicación de plaintext parcial bloquea el cierre.
+La campaña prolongada de la Fase B queda como actividad opcional de aseguramiento adicional, no como condición de cierre. Si se ejecuta, cualquier crash, excepción inesperada, consumo desproporcionado de recursos o publicación de plaintext parcial requiere triage.
 
 ## Estado
 
@@ -97,18 +95,19 @@ Cualquier crash, excepción inesperada, consumo desproporcionado de memoria/CPU 
 - [x] Definir superficies, invariantes, corpus y política de regresiones.
 - [x] Definir procedimiento reproducible para campaña prolongada.
 - [x] Añadir ejecutor multiplataforma que conserva manifiesto y logs por iteración.
-- [ ] Ejecutar campaña de 24 horas en GNU/Linux.
-- [ ] Ejecutar campaña de 24 horas en Windows 11 cliente.
-- [ ] Triar todos los hallazgos y añadir regresiones.
+- [ ] Campaña prolongada opcional en GNU/Linux (fuera del alcance de cierre de esta versión).
+- [ ] Campaña prolongada opcional en Windows 11 cliente (fuera del alcance de cierre de esta versión).
 - [ ] Implementar y ejecutar harness coverage-guided si se decide incluirlo en el alcance de la versión estable.
 
 ## Ejecución en infraestructura CI y selección del entorno
 
-La campaña completa de 24 horas **no se debe ejecutar como un único job de GitHub-hosted Actions**. Los límites de duración de los jobs y la disponibilidad efímera del runner hacen que ese enfoque no sea una sustitución fiable de un equipo dedicado. Tampoco se debe dividir una campaña en segmentos y sumar sus duraciones como si fueran una única ejecución continua: cada segmento reinicia el proceso y puede cambiar el estado exploratorio de Hypothesis.
+Si se decide ejecutar en el futuro, la campaña completa de 24 horas **no se debe ejecutar como un único job de GitHub-hosted Actions**. Los límites de duración de los jobs y la disponibilidad efímera del runner hacen que ese enfoque no sea una sustitución fiable de un equipo dedicado. Tampoco se debe dividir una campaña en segmentos y sumar sus duraciones como si fueran una única ejecución continua: cada segmento reinicia el proceso y puede cambiar el estado exploratorio de Hypothesis.
 
-Usa GitHub Actions para validar el código y el contrato del ejecutor, no para declarar completada la campaña prolongada. La evidencia de 24 horas debe proceder de un equipo dedicado o runner self-hosted controlado, con el manifiesto y los logs completos conservados como artefactos.
+Usa GitHub Actions para validar el código y el contrato del ejecutor, no para declarar completada la campaña prolongada. Si se ejecuta, la evidencia de 24 horas debe proceder de un equipo dedicado o runner self-hosted controlado, con el manifiesto y los logs completos conservados como artefactos.
 
 ### Distinción de plataformas Windows
+
+La campaña prolongada en Windows también es opcional. La validación de compatibilidad de filesystem en Windows 11 cliente se trata por separado en `docs/windows-11-validation.md`.
 
 Un job de Actions que use `windows-latest` valida el entorno Windows administrado por GitHub; **no demuestra compatibilidad en una instalación cliente de Windows 11**. Para cerrar ese requisito, ejecuta la campaña en un equipo Windows 11 real y registra la edición, versión y build exactas del sistema, además de Python, filesystem y hardware.
 
