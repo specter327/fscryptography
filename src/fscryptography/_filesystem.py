@@ -640,6 +640,8 @@ def _retire_source(
             raise RuntimeError("anchored source retirement requires a parent directory descriptor")
         anchor.verify_path_still_names_anchor()
         anchor.rename_noreplace(source_path.name, transaction.directory_fd, transaction.retained_name)
+    except InvalidPathError:
+        raise
     except Exception as exc:
         raise AtomicOperationError(
             f"{output_kind} was published but the source could not be retained safely"
