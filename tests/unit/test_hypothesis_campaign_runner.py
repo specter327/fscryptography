@@ -42,10 +42,10 @@ def test_campaign_runner_records_successful_iteration() -> None:
     with tempfile.TemporaryDirectory(
         prefix=".campaign-runner-", dir=TEST_DIRECTORY
     ) as directory:
-        result, output_dir = _run_campaign(
-            Path(directory),
-            "def test_campaign_target():\\n    assert 2 + 2 == 4\\n",
+        test_source = chr(10).join(
+            ["def test_campaign_target():", "    assert 2 + 2 == 4", ""]
         )
+        result, output_dir = _run_campaign(Path(directory), test_source)
 
         assert result.returncode == 0, result.stdout + result.stderr
         manifest = json.loads(
@@ -66,11 +66,14 @@ def test_campaign_runner_stops_and_records_failure() -> None:
     with tempfile.TemporaryDirectory(
         prefix=".campaign-runner-", dir=TEST_DIRECTORY
     ) as directory:
-        result, output_dir = _run_campaign(
-            Path(directory),
-            "def test_campaign_target():\\n"
-            "    assert False, 'intentional failure'\\n",
+        test_source = chr(10).join(
+            [
+                "def test_campaign_target():",
+                "    assert False, 'intentional failure'",
+                "",
+            ]
         )
+        result, output_dir = _run_campaign(Path(directory), test_source)
 
         assert result.returncode != 0
         manifest = json.loads(
@@ -91,7 +94,7 @@ def test_campaign_runner_refuses_to_overwrite_existing_manifest() -> None:
         output_dir.mkdir()
         manifest_path = output_dir / "campaign.json"
         manifest_path.write_text(
-            '{"status": "preserve"}\\n', encoding="utf-8"
+            '{"status": "preserve"}' + chr(10), encoding="utf-8"
         )
 
         result = subprocess.run(
@@ -114,5 +117,5 @@ def test_campaign_runner_refuses_to_overwrite_existing_manifest() -> None:
         assert result.returncode != 0
         assert "refusing to overwrite existing campaign" in result.stderr
         assert manifest_path.read_text(encoding="utf-8") == (
-            '{"status": "preserve"}\\n'
+            '{"status": "preserve"}' + chr(10)
         )
