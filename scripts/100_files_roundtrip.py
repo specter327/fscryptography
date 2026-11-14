@@ -97,7 +97,7 @@ def encrypt_all(manager, originals: Iterable[Path]) -> list[Path]:
     for index, source in enumerate(originals, start=1):
         size = source.stat().st_size
         digest = sha256(source)
-        expected = source.with_name(source.name + ".fscrypt")
+        expected = source.with_suffix(".fscrypt")
 
         manager.file.encrypt(source)
 
@@ -114,8 +114,15 @@ def encrypt_all(manager, originals: Iterable[Path]) -> list[Path]:
 def decrypt_all(manager, encrypted: Iterable[Path], expected_hashes: dict[str, str]) -> int:
     verified = 0
     items = list(encrypted)
+    expected_sources = {
+        str(Path(source).with_suffix(".fscrypt")): Path(source)
+        for source in expected_hashes
+    }
     for index, ciphertext in enumerate(items, start=1):
-        restored = ciphertext.with_name(ciphertext.name.removesuffix(".fscrypt"))
+        try:
+            restored = expected_sources[str(ciphertext)]
+        except KeyError as exc:
+            raise RuntimeError(f"No existe un origen registrado para el ciphertext: {ciphertext}") from exc
         manager.file.decrypt(ciphertext)
 
         if ciphertext.exists():
