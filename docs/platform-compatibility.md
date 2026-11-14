@@ -118,7 +118,7 @@ Cada combinación objetivo de sistema operativo, Python y filesystem debe cubrir
 8. Enlaces simbólicos, hard links y tipos de recurso no admitidos.
 9. Fallos inducidos durante escritura temporal, cierre/autenticación, publicación, rename y limpieza.
 10. Verificación de que el original permanece intacto ante errores y que no se publica plaintext parcial.
-11. Temporales huérfanos y fallos de rollback/recuperación.
+11. Residuos temporales tras terminación abrupta; comprobar el estado observable y documentar que no existe rollback ni recuperación automática.
 12. Límites de ruta y componente reales del filesystem probado.
 
 Los resultados de `real-filesystem-integration.yml` registran OS/build, arquitectura, versión exacta de Python, versiones de fscryptography/Tink/argon2-cffi/cryptography/pytest y filesystem con opciones relevantes de montaje. El runner Windows de GitHub es evidencia de comportamiento NTFS en ese entorno, no una prueba equivalente a Windows 11 cliente. Un resultado de una combinación no se extrapola a otra.
@@ -146,7 +146,7 @@ Antes de publicar soporte v1 se debe:
 - [x] Definir el contrato `str`/`os.PathLike[str]` y rechazar `PathLike[bytes]`.
 - [x] Añadir round-trip de filesystem con rutas largas, incluida una ruta Windows superior a MAX_PATH cuando el runner la soporta.
 - [ ] Ejecutar la matriz integral de filesystem específicamente en Windows 11 cliente; Windows Server 2025 no sustituye esa validación.
-- [ ] Fijar rangos runtime de dependencias y metadatos de empaquetado.
+- [x] Declarar rangos runtime de dependencias y metadatos de empaquetado en `pyproject.toml`; la validación CI de versiones mínimas está cubierta. La validación de límites superiores y de futuras actualizaciones debe repetirse al modificar los rangos.
 - [ ] Declarar soporte únicamente después de que todas las pruebas requeridas pasen.
 
 
