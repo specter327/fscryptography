@@ -80,7 +80,7 @@ Los fixtures criptográficos deben ser reproducibles. La generación aleatoria d
 - Confirmar que una apertura fallida no entrega el primer keyset si falla el segundo.
 - No usar un formato de keyset propio ni exponer keysets a la API pública.
 
-El perfil Tink `AES256_GCM` y el keyset `Aead` ya pasaron la prueba de backend en CI. La integración productiva genera y restaura ambos keysets Tink dentro del MasterKey. La nueva suite de vectores golden ejercita la apertura productiva de ambos keysets, su uso criptográfico y el rechazo de keysets inválidos o de primitive incorrecto; su resultado de CI debe comprobarse antes de marcar cerrada esta ampliación.
+El perfil Tink `AES256_GCM` y el keyset `Aead` ya pasaron la prueba de backend en CI. La integración productiva genera y restaura ambos keysets Tink dentro del MasterKey. La nueva suite de vectores golden ejercita la apertura productiva de ambos keysets, su uso criptográfico y el rechazo de keysets inválidos o de primitive incorrecto; pasó en los tres runtimes Python de la matriz de pruebas del paquete.
 
 ## Propiedades y fuzzing
 
@@ -99,7 +99,7 @@ La fase de especificación del formato se considera cerrada cuando:
 1. [x] Se aprueba el layout binario v1 y sus límites.
 2. [x] Se ejecuta el benchmark de referencia y se aprueba el perfil Argon2id v1 (64 MiB / 3 / p=1), junto con los límites normativos de entrada y contraseña de [la política de Argon2id](argon2id-policy.md).
 3. [~] Se valida el perfil AEAD de nombres Tink `AES256_GCM` y el tipo `Aead`; se aprobaron `~1` + Base64URL sin padding y el límite de 156 bytes UTF-8 para componentes de 255 bytes. La validación sobre filesystems objetivo sigue pendiente.
-4. [~] Se publican vectores golden estructurales y se añaden vectores independientes con keysets Tink válidos e inválidos; la ampliación queda pendiente de CI verde y revisión del resultado.
+4. [x] Se publican vectores golden estructurales y vectores independientes con keysets Tink válidos e inválidos; la suite productiva pasó en Python 3.11, 3.12 y 3.13.
 5. [x] Se acuerda el catálogo de errores de parsing/autenticación en docs/errors.md.
 6. [x] Se define la matriz de plataformas objetivo en docs/platform-compatibility.md.
 
