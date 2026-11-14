@@ -53,13 +53,13 @@ Python 3.10 aparece en esa ejecución histórica de backend, pero no forma parte
 
 Las plataformas difieren en longitud máxima de componentes, codificación, normalización, sensibilidad a mayúsculas, nombres reservados, caracteres no permitidos, semántica de rename/reemplazo, permisos/ACL, bloqueos y enlaces.
 
-La implementación debe consultar límites reales cuando la plataforma lo permita y validar el nombre final antes de modificar el recurso. No debe asumir que el límite común de 255 bytes se aplica a todos los filesystems.
+La implementación debe consultar límites reales cuando la plataforma lo permita y validar el nombre final antes de modificar el recurso. GNU/Linux mide el límite de componente en bytes; Windows lo mide en unidades de código UTF-16. No debe asumir que la misma métrica se aplica a todos los filesystems.
 
 ### NTFS / Windows
 
 La validación debe cubrir, como mínimo:
 
-- Límites de longitud de componentes y rutas, considerando las APIs y configuración de rutas largas de Windows.
+- Límites de longitud de componentes medidos en unidades UTF-16 y límites de rutas, considerando las APIs y configuración de rutas largas de Windows.
 - Caracteres no permitidos, nombres reservados de dispositivos y restricciones de nombres/trailing dots o spaces.
 - Comparación de nombres sin distinguir mayúsculas en el comportamiento habitual de NTFS, y directorios con sensibilidad a mayúsculas habilitada cuando sea aplicable.
 - Colisiones por equivalencia de nombres, no solo por igualdad textual.
@@ -72,7 +72,7 @@ El perfil conservador de nombres Windows y las reglas de validación antes de re
 
 La validación debe cubrir, como mínimo:
 
-- Límite de bytes por componente del filesystem y límite total de ruta impuesto por el sistema.
+- Límite de bytes UTF-8 por componente del filesystem y límite total de ruta impuesto por el sistema.
 - Nombres como secuencias de bytes y la conversión estricta UTF-8 exigida por el contrato de fscryptography.
 - Sensibilidad a mayúsculas y comportamiento de directorios con casefold cuando esté habilitado.
 - Permisos, ownership, ACL cuando estén presentes, enlaces simbólicos, hard links y archivos abiertos.
@@ -142,6 +142,7 @@ Antes de publicar soporte v1 se debe:
 - [x] Definir contrato de nombres reservados Windows, UTF-8 estricto y semántica de equivalencia/casefold por filesystem.
 - [x] Configurar CI de backend criptográfico en Windows para CPython 3.11–3.13 (pendiente de una ejecución verde antes de considerar validado el entorno).
 - [ ] Ejecutar pruebas integrales de filesystem en NTFS y ext4.
+- [x] Medir nombres GNU/Linux en bytes UTF-8 y nombres Windows en unidades UTF-16; probar round-trip Unicode en la matriz de filesystem.
 - [ ] Definir el contrato de rutas `PathLike` y validar rutas largas.
 - [ ] Fijar rangos runtime de dependencias y metadatos de empaquetado.
 - [ ] Declarar soporte únicamente después de que todas las pruebas requeridas pasen.
