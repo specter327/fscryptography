@@ -202,6 +202,84 @@ def test_windows_encrypt_rejects_source_mutation_between_streaming_and_retiremen
 
 
 
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="descriptor-relative source staging is GNU/Linux-only")
+def test_decrypt_rejects_ciphertext_mutation_between_streaming_and_retirement(
+    manager, tmp_path, monkeypatch
+):
+    """A ciphertext changed after decryption must not be retired as the consumed source."""
+    source = tmp_path / "late-decrypt-mutation.bin"
+    payload = b"authenticated ciphertext source"
+    source.write_bytes(payload)
+    manager.file.encrypt(source)
+    encrypted = tmp_path / "late-decrypt-mutation.fscrypt"
+    original_ciphertext = encrypted.read_bytes()
+    rename_noreplace = _filesystem.DirectoryAnchor.rename_noreplace
+    mutated = False
+
+    def mutate_before_staging(anchor, source_name, destination_fd, destination_name):
+        nonlocal mutated
+        if source_name == encrypted.name and destination_name.startswith(".fscryptography-source-") and not mutated:
+            with encrypted.open("ab") as stream:
+                stream.write(b" changed after decryption")
+            mutated = True
+        return rename_noreplace(anchor, source_name, destination_fd, destination_name)
+
+    monkeypatch.setattr(
+        _filesystem.DirectoryAnchor, "rename_noreplace", mutate_before_staging
+    )
+
+    with pytest.raises(
+        fscryptography.AtomicOperationError, match="source identity changed before retirement"
+    ):
+        manager.file.decrypt(encrypted)
+
+    assert mutated
+    assert source.read_bytes() == payload
+    assert encrypted.read_bytes() == original_ciphertext + b" changed after decryption"
+    assert not list(tmp_path.glob(".fscryptography-source-*"))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows path-based source staging")
+def test_windows_decrypt_rejects_ciphertext_mutation_between_streaming_and_retirement(
+    manager, tmp_path, monkeypatch
+):
+    """A ciphertext changed after decryption must be restored, not deleted, on Windows."""
+    source = tmp_path / "late-decrypt-mutation.bin"
+    payload = b"authenticated ciphertext source"
+    source.write_bytes(payload)
+    manager.file.encrypt(source)
+    encrypted = tmp_path / "late-decrypt-mutation.fscrypt"
+    original_ciphertext = encrypted.read_bytes()
+    real_rename = os.rename
+    mutated = False
+
+    def mutate_before_staging(src, dst, *args, **kwargs):
+        nonlocal mutated
+        if (
+            not mutated
+            and os.fspath(src) == os.fspath(encrypted)
+            and os.path.basename(os.fspath(dst)).startswith(".fscryptography-source-")
+        ):
+            with encrypted.open("ab") as stream:
+                stream.write(b" changed after decryption")
+            mutated = True
+        return real_rename(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(_filesystem.os, "rename", mutate_before_staging)
+
+    with pytest.raises(
+        fscryptography.AtomicOperationError, match="source identity changed during staging"
+    ):
+        manager.file.decrypt(encrypted)
+
+    assert mutated
+    assert source.read_bytes() == payload
+    assert encrypted.read_bytes() == original_ciphertext + b" changed after decryption"
+    assert not list(tmp_path.glob(".fscryptography-source-*"))
+
+
+
 def test_encrypt_rejects_in_place_source_mutation_during_streaming(
     manager, tmp_path, monkeypatch
 ):
