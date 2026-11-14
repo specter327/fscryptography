@@ -82,6 +82,9 @@ jobs:
       - name: Run package and filesystem tests
         run: python -m pytest -q tests/unit tests/file_format
 
+      - name: Run 100-file filesystem round-trip
+        run: python scripts/100_files_roundtrip.py
+
   backend-cryptography-windows:
     name: Windows cryptographic backend / Python ${{ matrix.python-version }}
     runs-on: windows-latest
