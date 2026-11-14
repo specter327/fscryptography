@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import platform
+import subprocess
 import sys
 import uuid
 from pathlib import Path
@@ -18,7 +19,7 @@ from pathlib import Path
 import pytest
 
 import fscryptography
-from fscryptography import AuthenticationError, DestinationConflictError
+from fscryptography import AuthenticationError, DestinationConflictError, UnsupportedResourceError
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -317,3 +318,29 @@ def test_windows_case_insensitive_decryption_collision_preserves_entries(tmp_pat
 
         assert encrypted.is_file()
         assert competitor.read_bytes() == b"pre-existing competitor"
+
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows junctions are reparse points")
+def test_windows_directory_junction_is_rejected_without_touching_target(tmp_path):
+    target = tmp_path / "junction-target"
+    target.mkdir()
+    child = target / "preserve.txt"
+    child.write_bytes(b"junction target must remain untouched")
+    junction = tmp_path / "junction-entry"
+
+    result = subprocess.run(
+        ["cmd.exe", "/c", "mklink", "/J", str(junction), str(target)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        pytest.skip(f"Windows junction creation is unavailable: {result.stderr or result.stdout}")
+
+    with fscryptography.Manager(key=fscryptography.generate()) as manager:
+        with pytest.raises(UnsupportedResourceError, match="reparse points"):
+            manager.dir.encrypt(junction)
+
+    assert junction.exists()
+    assert child.read_bytes() == b"junction target must remain untouched"

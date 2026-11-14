@@ -446,3 +446,11 @@ def test_encrypted_and_decrypted_files_use_restrictive_mode(manager, tmp_path):
         journal = transaction_dir / "journal.json"
         if journal.exists():
             assert journal.stat().st_mode & 0o777 == 0o600
+
+
+def test_reparse_point_attribute_detection():
+    from types import SimpleNamespace
+
+    assert _filesystem._is_reparse_point(SimpleNamespace(st_file_attributes=0x0400))
+    assert not _filesystem._is_reparse_point(SimpleNamespace(st_file_attributes=0))
+    assert not _filesystem._is_reparse_point(SimpleNamespace())
