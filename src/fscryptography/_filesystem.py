@@ -90,8 +90,11 @@ def _component_limit(parent: Path) -> int:
 
 def _path(value: str | os.PathLike[str]) -> Path:
     if not isinstance(value, (str, os.PathLike)):
-        raise TypeError("path must be str or os.PathLike")
-    result = Path(os.path.abspath(os.fspath(value)))
+        raise TypeError("path must be str or os.PathLike[str]")
+    raw_path = os.fspath(value)
+    if not isinstance(raw_path, str):
+        raise TypeError("path-like objects must return str, not bytes")
+    result = Path(os.path.abspath(raw_path))
     if result.name in {"", ".", ".."}:
         raise InvalidPathError("path must identify a filesystem resource")
     return result

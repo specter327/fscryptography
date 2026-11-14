@@ -84,7 +84,7 @@ No se debe asumir que todos los nombres existentes en ext4 son UTF-8 válido.
 
 La API acepta rutas de archivos y directorios, pero el soporte de tipos de entrada debe ser explícito:
 
-- Definir y probar `str` y `pathlib.Path`/`os.PathLike` antes de declararlos compatibles.
+- Aceptar `str` y `os.PathLike[str]`; rechazar explícitamente `PathLike[bytes]` para mantener un contrato Unicode coherente.
 - No seguir enlaces simbólicos ni aceptar junctions/reparse points de Windows como recursos fuente.
 - Rechazar tipos de recurso no admitidos antes de iniciar una transformación.
 - No permitir que una validación de ruta obsoleta se trate como garantía frente a cambios concurrentes externos.
@@ -143,6 +143,7 @@ Antes de publicar soporte v1 se debe:
 - [x] Configurar CI de backend criptográfico en Windows para CPython 3.11–3.13 (pendiente de una ejecución verde antes de considerar validado el entorno).
 - [ ] Ejecutar pruebas integrales de filesystem en NTFS y ext4.
 - [x] Medir nombres GNU/Linux en bytes UTF-8 y nombres Windows en unidades UTF-16; probar round-trip Unicode en la matriz de filesystem.
-- [ ] Definir el contrato de rutas `PathLike` y validar rutas largas.
+- [x] Definir el contrato `str`/`os.PathLike[str]` y rechazar `PathLike[bytes]`.
+- [x] Añadir round-trip de filesystem con rutas largas, incluida una ruta Windows superior a MAX_PATH cuando el runner la soporta.
 - [ ] Fijar rangos runtime de dependencias y metadatos de empaquetado.
 - [ ] Declarar soporte únicamente después de que todas las pruebas requeridas pasen.

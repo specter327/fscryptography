@@ -344,3 +344,45 @@ def test_windows_directory_junction_is_rejected_without_touching_target(tmp_path
 
     assert junction.exists()
     assert child.read_bytes() == b"junction target must remain untouched"
+
+
+def test_string_pathlike_round_trip_on_real_filesystem(tmp_path):
+    source = tmp_path / "pathlike-resource.txt"
+    payload = b"string PathLike round-trip"
+    source.write_bytes(payload)
+
+    class StringPathLike:
+        def __init__(self, value):
+            self.value = value
+
+        def __fspath__(self):
+            return str(self.value)
+
+    with fscryptography.Manager(key=fscryptography.generate()) as manager:
+        manager.file.encrypt(StringPathLike(source))
+        encrypted = source.with_suffix(".fscrypt")
+        manager.file.decrypt(StringPathLike(encrypted))
+
+    assert source.read_bytes() == payload
+
+
+def test_long_path_round_trip_on_real_filesystem(tmp_path):
+    parent = tmp_path
+    for index in range(5):
+        component = f"segment-{index}-" + ("x" * 44)
+        parent = parent / component
+        parent.mkdir()
+
+    source = parent / "long-path-resource.txt"
+    payload = b"long path round-trip"
+    source.write_bytes(payload)
+
+    if sys.platform == "win32":
+        assert len(str(source)) > 260
+
+    with fscryptography.Manager(key=fscryptography.generate()) as manager:
+        manager.file.encrypt(source)
+        encrypted = source.with_suffix(".fscrypt")
+        manager.file.decrypt(encrypted)
+
+    assert source.read_bytes() == payload

@@ -454,3 +454,25 @@ def test_reparse_point_attribute_detection():
     assert _filesystem._is_reparse_point(SimpleNamespace(st_file_attributes=0x0400))
     assert not _filesystem._is_reparse_point(SimpleNamespace(st_file_attributes=0))
     assert not _filesystem._is_reparse_point(SimpleNamespace())
+
+
+def test_path_accepts_string_pathlike():
+    class StringPathLike:
+        def __init__(self, value):
+            self.value = value
+
+        def __fspath__(self):
+            return self.value
+
+    result = _filesystem._path(StringPathLike("relative/file.txt"))
+    assert result.is_absolute()
+    assert result.name == "file.txt"
+
+
+def test_path_rejects_bytes_pathlike():
+    class BytesPathLike:
+        def __fspath__(self):
+            return b"relative/file.txt"
+
+    with pytest.raises(TypeError, match="must return str"):
+        _filesystem._path(BytesPathLike())
