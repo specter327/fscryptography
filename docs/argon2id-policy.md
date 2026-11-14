@@ -6,7 +6,7 @@
 
 Esta política define el perfil de protección por contraseña y los límites que deben comprobarse antes de ejecutar Argon2id. No modifica el layout binario v1.0 aprobado: los parámetros continúan almacenándose en los campos ya definidos de la cabecera protegida.
 
-Los valores de los fixtures de prueba no son parámetros de producción. La aprobación del perfil no implica que el parser productivo o la gestión de claves estén implementados.
+Los valores de los fixtures de prueba no son parámetros de producción. El parser productivo valida el perfil y los límites de entrada antes de ejecutar Argon2id. La política no define un limitador interno de concurrencia: la aplicación integradora debe controlar la admisión de aperturas protegidas.
 
 ## Perfil de producción aprobado
 
