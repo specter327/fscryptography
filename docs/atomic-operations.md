@@ -112,3 +112,8 @@ El contrato actual preserva el **contenido autenticado** y el nombre lógico cod
 - El renombrado de un directorio cambia únicamente su nombre de entrada: no recorre su contenido ni reconstruye sus metadatos.
 
 Esta distinción es intencional: copiar metadatos de seguridad sin una política explícita puede ampliar permisos o transferir etiquetas/ACL incompatibles al plaintext o ciphertext. La preservación selectiva de metadatos queda fuera del contrato actual y requerirá una decisión de diseño y pruebas específicas por plataforma antes de incorporarse.
+
+
+## Windows reparse points
+
+En Windows, la validación inicial rechaza entradas marcadas con FILE_ATTRIBUTE_REPARSE_POINT, además de los enlaces simbólicos reconocidos por Python. Esto incluye junctions y otros tipos de reparse point: no se aceptan como archivo o directorio fuente. Durante la retirada de archivos, la entrada en cuarentena vuelve a comprobarse para evitar eliminar un objeto que haya sido sustituido por un reparse point. La prueba de integración crea una junction real cuando el runner lo permite y verifica que el destino referenciado permanece intacto.

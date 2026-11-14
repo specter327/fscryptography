@@ -63,9 +63,8 @@ Estados permitidos:
 1. `prepared`: journal creado y sincronizado antes de crear/escribir el resultado.
 2. `result_ready`: resultado completo, autenticado cuando aplica, cerrado y sincronizado; su identidad ya está guardada en el journal.
 3. `published`: el resultado se ha publicado en el destino y la entrada de destino se ha sincronizado donde el sistema lo permite.
-4. `source_retained`: el origen se ha movido a la entrada `source` del directorio transaccional y ambas entradas de directorio se han sincronizado donde el sistema lo permite.
-5. `source_removed`: el origen retenido se ha eliminado y la entrada del directorio transaccional se ha sincronizado donde el sistema lo permite.
-6. `complete`: la operación terminó; se conserva el registro como evidencia.
+4. `source_removed`: el origen se ha retirado y el cambio de namespace se ha sincronizado donde el sistema lo permite.
+5. `complete`: la operación terminó; se puede retirar el directorio transaccional después de persistir el estado.
 
 Cada transición se persiste mediante: escribir un journal temporal exclusivo dentro del directorio transaccional, `flush`, `fsync` del archivo, reemplazar atómicamente `journal.json`, y sincronizar el directorio transaccional en GNU/Linux. La escritura parcial nunca debe reemplazar un journal válido.
 
@@ -150,6 +149,7 @@ Las clasificaciones no autorizan mutaciones. En particular, nunca se elimina un 
 
 La API pública expone `Manager.inspect_recovery(parent) -> tuple[RecoveryRecord, ...]`. Cada `RecoveryRecord` es una dataclass congelada con identificador, operación, estado, clasificación y nombres de recursos. La inspección no necesita la clave maestra, no se ejecuta en el constructor y nunca modifica el filesystem. No existe todavía API de resolución.
 
+
 ## Cobertura de endurecimiento añadida
 
 La suite de inspección incluye ahora casos adicionales para:
@@ -164,9 +164,10 @@ La suite de inspección incluye ahora casos adicionales para:
 
 Estos casos amplían la cobertura de fallos simulados; no equivalen a pruebas de pérdida real de energía ni a pruebas de concurrencia hostil. Siguen pendientes la matriz exhaustiva de fallos en cada operación filesystem, carreras entre validación y mutación, sustitución concurrente del padre/recursos y pruebas sobre filesystems alternativos.
 
+
 ## Terminación abrupta del proceso (GNU/Linux)
 
-La prueba de integración `tests/real_resources/test_crash_recovery.py` usa un proceso hijo y `os._exit` para terminar sin ejecutar `finally`, limpieza de contexto ni cierre ordenado de la aplicación. Se fuerza la terminación inmediatamente antes y después de persistir cada estado de archivo:
+La integración `tests/integration/test_crash_recovery.py` usa un proceso hijo y `os._exit` para terminar sin ejecutar `finally`, limpieza de contexto ni cierre ordenado de la aplicación. Se fuerza la terminación inmediatamente antes y después de persistir cada estado de archivo:
 
 - `prepared`
 - `result_ready`
@@ -177,6 +178,6 @@ La prueba de integración `tests/real_resources/test_crash_recovery.py` usa un p
 
 La prueba comprueba la clasificación resultante y el estado físico de origen y destino. También ejecuta la inspección varias veces y verifica que no cambie el journal ni el contenido del directorio transaccional.
 
-El estado durable puede ir por detrás del filesystem: si el proceso termina después de publicar pero antes de persistir `published`, el journal conserva `result_ready` mientras el destino ya existe; si el proceso termina después de retirar el origen pero antes de persistir `source_removed`, el journal conserva `source_retained` aunque el destino sea el único recurso visible. Por eso la clasificación se basa en las identidades observadas y no solo en el campo `state`.
+El estado durable puede ir por detrás del filesystem: si el proceso termina después de publicar pero antes de persistir `published`, el journal conserva `result_ready` mientras el destino ya existe; si termina después de retirar el origen pero antes de persistir `source_removed`, el journal conserva `source_retained` aunque el destino sea el único recurso visible. Por eso la clasificación se basa en las identidades observadas y no solo en el campo `state`.
 
 La prueba no representa un corte eléctrico ni un fallo del kernel/dispositivo. Tampoco valida la durabilidad física de los datos. La cobertura de terminación abrupta en Windows y las garantías reales de NTFS siguen pendientes.
