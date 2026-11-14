@@ -66,3 +66,10 @@ La validación integral de las garantías de filesystem sigue pendiente en la ma
 ## Responsabilidad del consumidor
 
 La librería no administra almacenamiento, transporte, intercambio, backup, recuperación, rotación ni revocación. El consumidor debe conservar el contenedor MasterKey y, cuando esté protegido, la contraseña. Perder cualquiera de los elementos requeridos implica pérdida práctica de acceso.
+
+
+## Concurrencia de operaciones y rotación
+
+Cada operación de archivo o directorio obtiene una instantánea de las primitivas activas al comenzar. La sustitución de contexto mediante Manager.change_key() es atómica: las operaciones nuevas usan la nueva generación; las operaciones en curso conservan la anterior hasta finalizar. Esto evita mezclar el keyset de nombres de una generación con el keyset de contenido de otra durante una misma transformación.
+
+Manager.close() impide iniciar nuevas operaciones y elimina la referencia del gestor a su contexto. No cancela operaciones que ya capturaron primitivas ni garantiza borrado seguro de memoria. El consumidor debe coordinar el cierre con las operaciones que desee esperar o detener.

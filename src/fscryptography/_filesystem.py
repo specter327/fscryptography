@@ -602,7 +602,7 @@ class _FileOperations:
         new_extension: str | None = None,
         encrypt_name: bool = False,
     ) -> None:
-        self._manager._require_open()
+        material = self._manager._require_open()
         source_path = _path(path)
         anchor = DirectoryAnchor(source_path.parent) if sys.platform.startswith("linux") else None
         try:
@@ -620,7 +620,7 @@ class _FileOperations:
                     raise ValueError("new_extension cannot be used when encrypt_name=True")
                 output_extension = None
                 destination_name = encrypt_name_fn(
-                    original_name, self._manager._names_primitive, profile, limit
+                    original_name, material.names, profile, limit
                 )
             else:
                 output_extension = ".fscrypt" if new_extension is None else new_extension
@@ -658,7 +658,7 @@ class _FileOperations:
                 opened_info = os.fstat(original.fileno())
                 output.write(header)
                 _copy_encrypt(
-                    self._manager._content_primitive,
+                    material.content,
                     original,
                     output,
                     header,
@@ -692,7 +692,7 @@ class _FileOperations:
             # An unpublished result is retained for explicit inspection.
 
     def decrypt(self, path: str | os.PathLike[str]) -> None:
-        self._manager._require_open()
+        material = self._manager._require_open()
         source_path = _path(path)
         anchor = DirectoryAnchor(source_path.parent) if sys.platform.startswith("linux") else None
         try:
@@ -715,7 +715,7 @@ class _FileOperations:
                 if header.encrypted_name:
                     destination_name = decrypt_name(
                         source_path.name,
-                        self._manager._names_primitive,
+                        material.names,
                         profile=profile,
                         max_component_bytes=limit,
                     )
@@ -739,7 +739,7 @@ class _FileOperations:
                       os.open(transaction.result_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600))
                 output = os.fdopen(fd, "wb")
                 _copy_decrypt(
-                    self._manager._content_primitive,
+                    material.content,
                     encrypted,
                     output,
                     header.raw,
@@ -781,7 +781,7 @@ class _DirectoryOperations:
         self._manager = manager
 
     def encrypt(self, path: str | os.PathLike[str]) -> None:
-        self._manager._require_open()
+        material = self._manager._require_open()
         source = _path(path)
         anchor = DirectoryAnchor(source.parent) if sys.platform.startswith("linux") else None
         transaction = None
@@ -790,7 +790,7 @@ class _DirectoryOperations:
                            else _check_source(source, directory=True))
             destination_name = encrypt_name_fn(
                 source.name,
-                self._manager._names_primitive,
+                material.names,
                 _profile(),
                 _component_limit(source.parent),
             )
@@ -816,7 +816,7 @@ class _DirectoryOperations:
                 anchor.close()
 
     def decrypt(self, path: str | os.PathLike[str]) -> None:
-        self._manager._require_open()
+        material = self._manager._require_open()
         source = _path(path)
         anchor = DirectoryAnchor(source.parent) if sys.platform.startswith("linux") else None
         transaction = None
@@ -825,7 +825,7 @@ class _DirectoryOperations:
                            else _check_source(source, directory=True))
             destination_name = decrypt_name(
                 source.name,
-                self._manager._names_primitive,
+                material.names,
                 profile=_profile(),
                 max_component_bytes=_component_limit(source.parent),
             )

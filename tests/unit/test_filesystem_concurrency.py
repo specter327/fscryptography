@@ -255,3 +255,69 @@ def test_windows_replacement_after_handle_open_is_not_deleted(
     assert not source.exists()
     assert (tmp_path / "windows-handle-race.fscrypt").is_file()
 
+
+
+def test_encryption_uses_one_key_snapshot_during_concurrent_rotation(
+    tmp_path, monkeypatch
+):
+    first_key = fscryptography.generate()
+    second_key = fscryptography.generate()
+    manager = fscryptography.Manager(first_key)
+    source = tmp_path / "key-snapshot.txt"
+    payload = b"one operation must not mix two manager key generations"
+    source.write_bytes(payload)
+    original_encrypt_name = fscryptography._filesystem.encrypt_name_fn
+
+    def rotate_after_name_encryption(name, primitive, profile, limit):
+        encrypted_name = original_encrypt_name(name, primitive, profile, limit)
+        manager.change_key(second_key)
+        return encrypted_name
+
+    monkeypatch.setattr(
+        fscryptography._filesystem, "encrypt_name_fn", rotate_after_name_encryption
+    )
+    try:
+        manager.file.encrypt(source, encrypt_name=True)
+        assert manager.export_key() == second_key
+
+        encrypted = next(
+            path for path in tmp_path.iterdir()
+            if path.is_file() and path.name.startswith("~1")
+        )
+        with fscryptography.Manager(first_key) as original_context:
+            original_context.file.decrypt(encrypted)
+        assert source.read_bytes() == payload
+    finally:
+        manager.close()
+
+
+def test_in_flight_operation_completes_with_snapshot_after_manager_close(
+    tmp_path, monkeypatch
+):
+    key = fscryptography.generate()
+    manager = fscryptography.Manager(key)
+    source = tmp_path / "close-snapshot.txt"
+    payload = b"close prevents future operations, not an operation already started"
+    source.write_bytes(payload)
+    original_encrypt_name = fscryptography._filesystem.encrypt_name_fn
+
+    def close_after_name_encryption(name, primitive, profile, limit):
+        encrypted_name = original_encrypt_name(name, primitive, profile, limit)
+        manager.close()
+        return encrypted_name
+
+    monkeypatch.setattr(
+        fscryptography._filesystem, "encrypt_name_fn", close_after_name_encryption
+    )
+    manager.file.encrypt(source, encrypt_name=True)
+
+    with pytest.raises(fscryptography.ClosedInstanceError):
+        manager.export_key()
+
+    encrypted = next(
+        path for path in tmp_path.iterdir()
+        if path.is_file() and path.name.startswith("~1")
+    )
+    with fscryptography.Manager(key) as original_context:
+        original_context.file.decrypt(encrypted)
+    assert source.read_bytes() == payload

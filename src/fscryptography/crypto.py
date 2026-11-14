@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from threading import RLock
 
 from ._master_key import (
     _KeyMaterial,
@@ -29,16 +30,18 @@ class Manager:
     def __init__(self, key: str, *, password: str | None = None) -> None:
         key_bytes = _decode_master_key(key)
         material = _open_master_key_bytes(key_bytes, password=password)
-        self._key: bytes | None = key_bytes
-        self._material: _KeyMaterial | None = material
+        self._state_lock = RLock()
+        self._context: tuple[bytes, _KeyMaterial] | None = (key_bytes, material)
         from ._filesystem import _DirectoryOperations, _FileOperations
         self._file_operations = _FileOperations(self)
         self._directory_operations = _DirectoryOperations(self)
 
     def _require_open(self) -> _KeyMaterial:
-        if self._material is None or self._key is None:
+        with self._state_lock:
+            context = self._context
+        if context is None:
             raise ClosedInstanceError("Manager is closed")
-        return self._material
+        return context[1]
 
     @property
     def _content_primitive(self):
@@ -60,11 +63,15 @@ class Manager:
 
     def change_key(self, new_key: str, *, password: str | None = None) -> None:
         """Replace the active context only after the new key opens successfully."""
-        self._require_open()
+        with self._state_lock:
+            if self._context is None:
+                raise ClosedInstanceError("Manager is closed")
         key_bytes = _decode_master_key(new_key)
         material = _open_master_key_bytes(key_bytes, password=password)
-        self._key = key_bytes
-        self._material = material
+        with self._state_lock:
+            if self._context is None:
+                raise ClosedInstanceError("Manager is closed")
+            self._context = (key_bytes, material)
 
     def inspect_recovery(self, parent):
         """Return immutable, read-only diagnostics for transactions under parent."""
@@ -73,13 +80,16 @@ class Manager:
 
     def export_key(self) -> str:
         """Return the current MasterKey container as canonical Base64 text."""
-        self._require_open()
-        return base64.b64encode(self._key).decode("ascii")
+        with self._state_lock:
+            context = self._context
+        if context is None:
+            raise ClosedInstanceError("Manager is closed")
+        return base64.b64encode(context[0]).decode("ascii")
 
     def close(self) -> None:
         """Invalidate this manager and release references to its key material."""
-        self._material = None
-        self._key = None
+        with self._state_lock:
+            self._context = None
 
     def __enter__(self) -> Manager:
         self._require_open()
