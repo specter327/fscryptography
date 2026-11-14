@@ -74,7 +74,8 @@ Configura un token de TestPyPI de forma segura en el entorno del proceso. No lo 
 
 ```bash
 export TWINE_USERNAME=__token__
-export TWINE_PASSWORD='<TESTPYPI_API_TOKEN>'
+read -rsp "TestPyPI API token: " TWINE_PASSWORD; echo
+export TWINE_PASSWORD
 python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*
 ```
 
@@ -95,7 +96,8 @@ Una vez aprobados los artefactos y la prueba de instalación, configura un token
 
 ```bash
 export TWINE_USERNAME=__token__
-export TWINE_PASSWORD='<PYPI_API_TOKEN>'
+read -rsp "PyPI API token: " TWINE_PASSWORD; echo
+export TWINE_PASSWORD
 python -m twine upload dist/*
 ```
 
