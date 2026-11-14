@@ -116,18 +116,21 @@ La función `obtain_password_from_secure_input()` es ilustrativa: debe sustituir
 `Manager` valida y abre el contenedor MasterKey. Mantiene las primitivas criptográficas preparadas para las operaciones posteriores.
 
 ```python
-manager = fscryptography.Manager(key=master_key)
+password = obtain_password_from_secure_input()
 
-try:
+with fscryptography.Manager(
+    key=master_key,
+    password=password,
+) as manager:
     manager.file.encrypt("informe.txt")
-finally:
-    manager.close()
 ```
 
 Se recomienda el administrador de contexto:
 
 ```python
-with fscryptography.Manager(key=master_key) as manager:
+plain_master_key = fscryptography.generate()
+
+with fscryptography.Manager(key=plain_master_key) as manager:
     manager.file.encrypt("informe.txt")
 ```
 
@@ -142,7 +145,7 @@ with fscryptography.Manager(key=master_key) as manager:
     # Salida predeterminada: reporte.fscrypt
     manager.file.encrypt(Path("reporte.txt"))
 
-    # Extensión de salida personalizada: backup.locked
+    # Extensión de salida personalizada: backup.tar.locked
     manager.file.encrypt(
         Path("backup.tar.gz"),
         new_extension=".locked",
@@ -206,9 +209,10 @@ with fscryptography.Manager(key=master_key) as manager:
     # La API transforma el nombre in-place y devuelve None.
     # Identifica la nueva entrada comparando el estado anterior y posterior.
     new_entries = [
-        parent / name
-        for name in (item.name for item in parent.iterdir())
-        if name not in previous_entries
+        item
+        for item in parent.iterdir()
+        if item.name not in previous_entries
+        and not item.name.startswith(".fscryptography-txn-")
     ]
     if len(new_entries) != 1:
         raise RuntimeError(
@@ -238,9 +242,14 @@ with fscryptography.Manager(key=master_key) as manager:
 Para cambiar a un contenedor protegido por contraseña:
 
 ```python
+current_password = obtain_password_from_secure_input()
+new_password = obtain_password_from_secure_input()
 protected_key = fscryptography.generate(password=new_password)
 
-with fscryptography.Manager(key=master_key) as manager:
+with fscryptography.Manager(
+    key=master_key,
+    password=current_password,
+) as manager:
     manager.change_key(
         protected_key,
         password=new_password,

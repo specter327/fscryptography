@@ -140,7 +140,7 @@ Antes de publicar soporte v1 se debe:
 - [x] Definir una matriz objetivo inicial: Windows 11 y Ubuntu 22.04/24.04 LTS, x86-64, CPython 3.11–3.13, NTFS/ext4.
 - [x] Separar evidencia de backend criptográfico de validación integral de filesystem.
 - [x] Definir contrato de nombres reservados Windows, UTF-8 estricto y semántica de equivalencia/casefold por filesystem.
-- [x] Configurar CI de backend criptográfico en Windows para CPython 3.11–3.13 (pendiente de una ejecución verde antes de considerar validado el entorno).
+- [x] Ejecutar CI de backend criptográfico en Windows para CPython 3.11–3.13; la ejecución documentada pasó. Esta evidencia no sustituye la validación integral de filesystem.
 - [ ] Ejecutar pruebas integrales de filesystem en NTFS y ext4.
 - [x] Medir nombres GNU/Linux en bytes UTF-8 y nombres Windows en unidades UTF-16; probar round-trip Unicode en la matriz de filesystem.
 - [ ] Definir el contrato de rutas `PathLike` y validar rutas largas.
