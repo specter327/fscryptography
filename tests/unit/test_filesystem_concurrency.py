@@ -132,6 +132,76 @@ def test_concurrent_encrypted_names_can_publish_duplicate_results(
     assert outputs[1].is_file()
 
 
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="descriptor-relative source staging is GNU/Linux-only")
+def test_encrypt_rejects_source_mutation_between_streaming_and_retirement(
+    manager, tmp_path, monkeypatch
+):
+    """A same-inode write after streaming must not cause the changed source to be retired."""
+    source = tmp_path / "late-mutation.bin"
+    original_payload = b"original source bytes"
+    source.write_bytes(original_payload)
+    rename_noreplace = _filesystem.DirectoryAnchor.rename_noreplace
+    mutated = False
+
+    def mutate_before_staging(anchor, source_name, destination_fd, destination_name):
+        nonlocal mutated
+        if source_name == source.name and destination_name.startswith(".fscryptography-source-") and not mutated:
+            source.write_bytes(original_payload + b" changed after streaming")
+            mutated = True
+        return rename_noreplace(anchor, source_name, destination_fd, destination_name)
+
+    monkeypatch.setattr(
+        _filesystem.DirectoryAnchor, "rename_noreplace", mutate_before_staging
+    )
+
+    with pytest.raises(
+        fscryptography.AtomicOperationError, match="source identity changed before retirement"
+    ):
+        manager.file.encrypt(source)
+
+    assert mutated
+    assert source.read_bytes() == original_payload + b" changed after streaming"
+    assert (tmp_path / "late-mutation.fscrypt").is_file()
+    assert not list(tmp_path.glob(".fscryptography-source-*"))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows path-based source staging")
+def test_windows_encrypt_rejects_source_mutation_between_streaming_and_retirement(
+    manager, tmp_path, monkeypatch
+):
+    """A same-inode write after streaming must be restored, not deleted, on Windows."""
+    source = tmp_path / "late-mutation.bin"
+    original_payload = b"original source bytes"
+    source.write_bytes(original_payload)
+    real_rename = os.rename
+    mutated = False
+
+    def mutate_before_staging(src, dst, *args, **kwargs):
+        nonlocal mutated
+        if (
+            not mutated
+            and os.fspath(src) == os.fspath(source)
+            and os.fspath(dst).startswith(".fscryptography-source-")
+        ):
+            source.write_bytes(original_payload + b" changed after streaming")
+            mutated = True
+        return real_rename(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(_filesystem.os, "rename", mutate_before_staging)
+
+    with pytest.raises(
+        fscryptography.AtomicOperationError, match="source identity changed during staging"
+    ):
+        manager.file.encrypt(source)
+
+    assert mutated
+    assert source.read_bytes() == original_payload + b" changed after streaming"
+    assert (tmp_path / "late-mutation.fscrypt").is_file()
+    assert not list(tmp_path.glob(".fscryptography-source-*"))
+
+
+
 def test_encrypt_rejects_in_place_source_mutation_during_streaming(
     manager, tmp_path, monkeypatch
 ):
