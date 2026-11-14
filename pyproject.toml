@@ -50,7 +50,7 @@ Homepage = "https://github.com/specter327/fscryptography"
 Repository = "https://github.com/specter327/fscryptography"
 Documentation = "https://github.com/specter327/fscryptography/tree/main/docs"
 Issues = "https://github.com/specter327/fscryptography/issues"
-Changelog = "https://github.com/specter327/fscryptography/releases"
+Changelog = "https://github.com/specter327/fscryptography/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 include-package-data = true

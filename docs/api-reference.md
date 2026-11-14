@@ -42,7 +42,7 @@ Si el contenedor fue generado con password=..., la contraseña debe suministrars
 
     exported_key: str = manager.export_key()
 
-change_key() valida y abre completamente la nueva clave antes de sustituir el contexto activo. Si falla, el contexto anterior permanece intacto. export_key() devuelve la representación Base64 canónica de la clave activa.
+change_key() valida y abre completamente la nueva clave antes de sustituir el contexto activo. Si falla, el contexto anterior permanece intacto. export_key() devuelve la representación Base64 canónica de la clave activa. change_key() no vuelve a cifrar archivos existentes ni actualiza sus keysets: los recursos cifrados con una MasterKey anterior siguen requiriendo esa MasterKey para descifrarse. Conserva cada clave mientras existan recursos que dependan de ella.
 
 ## Operaciones sobre recursos
 

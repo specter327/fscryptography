@@ -235,6 +235,8 @@ with fscryptography.Manager(key=master_key) as manager:
     exported_key: str = manager.export_key()
 ```
 
+**Importante:** `change_key()` solo cambia la clave utilizada por operaciones nuevas. No vuelve a cifrar archivos existentes ni migra sus nombres. Cada recurso sigue requiriendo la MasterKey con la que fue cifrado; conserva las claves anteriores mientras existan recursos que dependan de ellas.
+
 Para cambiar a un contenedor protegido por contraseña:
 
 ```python
@@ -359,6 +361,8 @@ Esta librería manipula claves criptográficas y recursos del usuario. Antes de 
 La documentación normativa y de diseño se mantiene separada del manual de uso:
 
 - [Índice de documentación](docs/index.md)
+- [Versionado y compatibilidad](docs/versioning.md)
+- [Historial de cambios](CHANGELOG.md)
 - [Contrato de API](docs/api-reference.md)
 - [Arquitectura](docs/architecture.md)
 - [Diseño criptográfico](docs/cryptographic-design.md)
