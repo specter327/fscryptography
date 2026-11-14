@@ -101,3 +101,27 @@ Cualquier crash, excepción inesperada, consumo desproporcionado de memoria/CPU 
 - [ ] Ejecutar campaña de 24 horas en Windows 11 cliente.
 - [ ] Triar todos los hallazgos y añadir regresiones.
 - [ ] Implementar y ejecutar harness coverage-guided si se decide incluirlo en el alcance de la versión estable.
+
+## Ejecución en infraestructura CI y selección del entorno
+
+La campaña completa de 24 horas **no se debe ejecutar como un único job de GitHub-hosted Actions**. Los límites de duración de los jobs y la disponibilidad efímera del runner hacen que ese enfoque no sea una sustitución fiable de un equipo dedicado. Tampoco se debe dividir una campaña en segmentos y sumar sus duraciones como si fueran una única ejecución continua: cada segmento reinicia el proceso y puede cambiar el estado exploratorio de Hypothesis.
+
+Usa GitHub Actions para validar el código y el contrato del ejecutor, no para declarar completada la campaña prolongada. La evidencia de 24 horas debe proceder de un equipo dedicado o runner self-hosted controlado, con el manifiesto y los logs completos conservados como artefactos.
+
+### Distinción de plataformas Windows
+
+Un job de Actions que use `windows-latest` valida el entorno Windows administrado por GitHub; **no demuestra compatibilidad en una instalación cliente de Windows 11**. Para cerrar ese requisito, ejecuta la campaña en un equipo Windows 11 real y registra la edición, versión y build exactas del sistema, además de Python, filesystem y hardware.
+
+### Lista de preparación antes de cada campaña
+
+1. Crear un checkout limpio de la rama y registrar el SHA exacto.
+2. Confirmar que no existen cambios locales sin registrar y que no se reutiliza un directorio de salida.
+3. Instalar las dependencias de prueba desde el proyecto.
+4. Ejecutar primero la campaña operativa de 60 segundos en un directorio nuevo.
+5. Revisar que el manifiesto termina con `status: completed`, que contiene al menos una iteración y que cada log referenciado existe.
+6. Solo entonces iniciar la campaña de 86400 segundos en otro directorio nuevo.
+7. Monitorizar CPU, memoria, espacio en disco y temperatura externamente durante la ejecución.
+8. Al terminar, conservar sin modificar `campaign.json`, `campaign.log` y todos los `run-*.log`; calcular hashes del paquete de evidencia si se va a transferir.
+9. Revisar el código de salida y el manifiesto. Cualquier fallo, interrupción o estado `running` requiere triage; no se contabiliza como campaña aprobada.
+
+No ejecutes simultáneamente dos campañas sobre el mismo checkout ni compartas el directorio de salida entre plataformas. Para comparar resultados, registra cada entorno como una campaña independiente.
