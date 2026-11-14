@@ -69,7 +69,10 @@ Todas las excepciones propias derivan de `FsCryptographyError`, que deriva de `E
 | Descifrado de archivo | Encabezado malformado o versión no soportada | `FormatError` / `UnsupportedFormatVersionError` |
 | Descifrado de archivo | Fallo del stream autenticado, incluido truncamiento o alteración detectados por Tink | `AuthenticationError` |
 | Descifrado de archivo | Error de I/O del stream | Excepción estándar `OSError` |
-| Cifrado/descifrado de nombre | Argumento de nombre mal tipado, envelope Base64URL inválido/truncado, o plaintext autenticado que no es UTF-8 válido | `TypeError` / `FormatError` |\n| Cifrado/descifrado de nombre | AEAD no autentica el ciphertext | `AuthenticationError` |\n| Cifrado de nombre | Primitive AEAD falla inesperadamente o devuelve un tipo inválido | `BackendError` |\n| Descifrado de nombre | Plaintext autenticado viola el perfil o el límite de componente | `NameConstraintError` |
+| Cifrado/descifrado de nombre | Argumento de nombre mal tipado, envelope Base64URL inválido/truncado, o plaintext autenticado que no es UTF-8 válido | `TypeError` / `FormatError` |
+| Cifrado/descifrado de nombre | AEAD no autentica el ciphertext | `AuthenticationError` |
+| Cifrado de nombre | Primitive AEAD falla inesperadamente o devuelve un tipo inválido | `BackendError` |
+| Descifrado de nombre | Plaintext autenticado viola el perfil o el límite de componente | `NameConstraintError` |
 | Publicación | Destino existente | `DestinationConflictError` |
 | Publicación | Primitiva no-replace no disponible o fallo de publicación | `AtomicOperationError` |
 | Transformación | Identidad/metadatos del origen cambian durante el streaming | `AtomicOperationError` |
@@ -82,7 +85,8 @@ Todas las excepciones propias derivan de `FsCryptographyError`, que deriva de `E
 1. Antes de publicar el resultado, errores de lectura/escritura que sean `OSError` se propagan como errores del sistema; errores de autenticación y formato mantienen su categoría.
 2. Un conflicto de destino se expresa como `DestinationConflictError`; no se reemplaza el destino existente.
 3. Después de publicar el resultado, la retirada del origen es una fase distinta. Si falla, se usa `AtomicOperationError` porque puede existir ya un resultado válido y el origen puede seguir presente, haberse movido a un nombre temporal o requerir inspección manual.
-4. El adaptador interno `load_name_primitive()` traduce fallos al registrar/restaurar un keyset de nombres a `BackendError`; rechaza argumentos de tipo incorrecto con `TypeError` y bytes vacíos con `ValueError`.\n5. El cleanup de temporales es best-effort. Un error de cleanup no debe ocultar el error primario y no se garantiza limpieza tras terminación abrupta.
+4. El adaptador interno `load_name_primitive()` traduce fallos al registrar/restaurar un keyset de nombres a `BackendError`; rechaza argumentos de tipo incorrecto con `TypeError` y bytes vacíos con `ValueError`.
+5. El cleanup de temporales es best-effort. Un error de cleanup no debe ocultar el error primario y no se garantiza limpieza tras terminación abrupta.
 6. `AtomicOperationError` no significa que la operación se haya revertido. El llamador debe inspeccionar el estado real antes de reintentar.
 
 ## Excepciones estándar del sistema
