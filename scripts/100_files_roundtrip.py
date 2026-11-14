@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
 import random
 import shutil
@@ -169,7 +168,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    temporary_workspace = None
+    temporary_workspace = False
+    failed = False
 
     if args.workspace is not None:
         workspace = args.workspace.expanduser().resolve()
@@ -177,8 +177,8 @@ def main() -> int:
     elif args.keep_workspace:
         workspace = Path(tempfile.mkdtemp(prefix="fscryptography-100-files-"))
     else:
-        temporary_workspace = tempfile.TemporaryDirectory(prefix="fscryptography-100-files-")
-        workspace = Path(temporary_workspace.name)
+        temporary_workspace = True
+        workspace = Path(tempfile.mkdtemp(prefix="fscryptography-100-files-"))
 
     try:
         print("=" * 78)
@@ -227,14 +227,11 @@ def main() -> int:
     except Exception as exc:
         print(f"\n[FAIL] {type(exc).__name__}: {exc}", file=sys.stderr)
         print(f"Workspace para inspección: {workspace}", file=sys.stderr)
-        if temporary_workspace is not None:
-            # Preserve evidence after a failure instead of deleting it.
-            temporary_workspace.cleanup()
-            print("Nota: el workspace temporal se limpió; usa --keep-workspace para depurar.", file=sys.stderr)
+        failed = True
         return 1
     finally:
-        if temporary_workspace is not None:
-            temporary_workspace.cleanup()
+        if temporary_workspace and not failed:
+            shutil.rmtree(workspace, ignore_errors=True)
 
 
 if __name__ == "__main__":
