@@ -98,10 +98,10 @@ Puedes generar el contenedor protegido mediante una contraseña:
 import fscryptography
 
 password = obtain_password_from_secure_input()
-master_key = fscryptography.generate(password=password)
+protected_master_key = fscryptography.generate(password=password)
 
 with fscryptography.Manager(
-    key=master_key,
+    key=protected_master_key,
     password=password,
 ) as manager:
     manager.file.encrypt("confidencial.pdf")
@@ -142,7 +142,7 @@ with fscryptography.Manager(key=master_key) as manager:
     # Salida predeterminada: reporte.fscrypt
     manager.file.encrypt(Path("reporte.txt"))
 
-    # Extensión de salida personalizada: backup.locked
+    # Extensión de salida personalizada: backup.tar.locked
     manager.file.encrypt(
         Path("backup.tar.gz"),
         new_extension=".locked",
@@ -209,6 +209,7 @@ with fscryptography.Manager(key=master_key) as manager:
         parent / name
         for name in (item.name for item in parent.iterdir())
         if name not in previous_entries
+        and not name.startswith(".fscryptography-txn-")
     ]
     if len(new_entries) != 1:
         raise RuntimeError(
@@ -228,6 +229,7 @@ Para proteger el contenido de un árbol de directorios, cada archivo debe proces
 
 ```python
 new_key = fscryptography.generate()
+new_password = obtain_password_from_secure_input()
 
 with fscryptography.Manager(key=master_key) as manager:
     manager.change_key(new_key)
@@ -238,6 +240,7 @@ with fscryptography.Manager(key=master_key) as manager:
 Para cambiar a un contenedor protegido por contraseña:
 
 ```python
+new_password = obtain_password_from_secure_input()
 protected_key = fscryptography.generate(password=new_password)
 
 with fscryptography.Manager(key=master_key) as manager:
