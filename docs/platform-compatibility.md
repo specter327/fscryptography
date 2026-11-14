@@ -125,7 +125,7 @@ Los resultados de `real-filesystem-integration.yml` registran OS/build, arquitec
 
 ## Dependencias y empaquetado
 
-Las versiones mínimas y máximas de Tink, argon2-cffi y cryptography deben quedar fijadas en los metadatos de empaquetado y probarse en la matriz objetivo. El workflow de backend actual instala rangos de dependencias para validación; esos rangos no sustituyen una política de dependencias runtime ni prueban el empaquetado de la librería.
+Las versiones mínimas y máximas de Tink, argon2-cffi y cryptography están declaradas en `pyproject.toml`. La matriz normal instala las versiones más recientes que satisfacen esos rangos. El workflow [dependency-compatibility.yml](../.github/workflows/dependency-compatibility.yml) instala las versiones mínimas directas en Python 3.11 sobre Ubuntu 22.04 y Windows y ejecuta las suites de unidad, filesystem real y backends criptográficos. La compatibilidad de mínimos y máximos debe revisarse al actualizar esos rangos.
 
 Antes de publicar soporte v1 se debe:
 

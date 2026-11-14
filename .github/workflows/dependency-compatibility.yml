@@ -1,0 +1,57 @@
+name: Minimum runtime dependency compatibility
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/dependency-compatibility.yml"
+      - "pyproject.toml"
+      - "src/**"
+      - "tests/**"
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/dependency-compatibility.yml"
+      - "pyproject.toml"
+      - "src/**"
+      - "tests/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  minimum-runtime-dependencies:
+    name: Minimum dependencies / ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+        python-version: ["3.11"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install minimum supported runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --constraint tests/constraints/minimum-runtime.txt -e ".[test]"
+
+      - name: Record resolved dependency versions
+        run: |
+          python -c "import importlib.metadata as m, sys; print('python:', sys.version); [print(name + ':', m.version(name)) for name in ('fscryptography', 'tink', 'argon2-cffi', 'cryptography', 'pytest')]"
+
+      - name: Run unit, format, and real-filesystem integration tests
+        run: python -m pytest -q tests/unit tests/file_format tests/real_resources
+
+      - name: Validate cryptographic backends
+        run: |
+          python tests/backend_validation/test_tink_streaming_aead.py
+          python tests/backend_validation/test_tink_aead_names.py
+          python tests/backend_validation/test_master_key_protection.py
+          python tests/master_key_format/test_master_key_format_vectors.py
