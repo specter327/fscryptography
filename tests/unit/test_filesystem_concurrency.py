@@ -89,7 +89,49 @@ def test_competing_encryption_of_same_source_never_publishes_multiple_results(
     assert source.read_bytes() == payload
 
 
- 
+def test_concurrent_encrypted_names_can_publish_duplicate_results(
+    manager, tmp_path, monkeypatch
+):
+    """Randomized encrypted names allow both results to publish before source retirement."""
+    source = tmp_path / "private-name.txt"
+    payload = b"same source processed concurrently with randomized destination names"
+    source.write_bytes(payload)
+
+    barrier = Barrier(2)
+    copy_encrypt = _filesystem._copy_encrypt
+
+    def synchronize_after_stream(primitive, original, destination, aad):
+        copy_encrypt(primitive, original, destination, aad)
+        barrier.wait(timeout=15)
+
+    monkeypatch.setattr(_filesystem, "_copy_encrypt", synchronize_after_stream)
+
+    def encrypt():
+        try:
+            manager.file.encrypt(source, encrypt_name=True)
+        except Exception as error:
+            return error
+        return None
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(lambda _: encrypt(), range(2)))
+
+    outputs = sorted(
+        path for path in tmp_path.iterdir()
+        if path.is_file() and path.name.startswith("~1")
+    )
+    assert len(outputs) == 2
+    assert sum(outcome is None for outcome in outcomes) == 1, outcomes
+    assert sum(isinstance(outcome, fscryptography.AtomicOperationError) for outcome in outcomes) == 1
+    assert not source.exists()
+
+    # Either published result is independently decryptable. The other remains
+    # as a duplicate ciphertext and is intentionally not auto-cleaned.
+    manager.file.decrypt(outputs[0])
+    assert source.read_bytes() == payload
+    assert outputs[1].is_file()
+
+
 def test_encrypt_rejects_in_place_source_mutation_during_streaming(
     manager, tmp_path, monkeypatch
 ):
