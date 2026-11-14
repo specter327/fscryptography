@@ -5,6 +5,8 @@ on:
     paths:
       - ".github/workflows/backend-validation.yml"
       - "src/**"
+      - "scripts/**"
+      - "docs/100-files-roundtrip.md"
       - "tests/backend_validation/**"
       - "tests/master_key_format/**"
       - "tests/unit/**"
@@ -14,6 +16,8 @@ on:
     paths:
       - ".github/workflows/backend-validation.yml"
       - "src/**"
+      - "scripts/**"
+      - "docs/100-files-roundtrip.md"
       - "tests/backend_validation/**"
       - "tests/master_key_format/**"
       - "tests/unit/**"
@@ -49,6 +53,9 @@ jobs:
 
       - name: Run package unit tests
         run: python -m pytest -q tests/unit tests/file_format
+
+      - name: Run 100-file filesystem round-trip
+        run: python scripts/100_files_roundtrip.py
 
   package-unit-tests-windows:
     name: Windows filesystem unit tests / Python ${{ matrix.python-version }}
