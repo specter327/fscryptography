@@ -128,7 +128,9 @@ with fscryptography.Manager(
 Se recomienda el administrador de contexto:
 
 ```python
-with fscryptography.Manager(key=master_key) as manager:
+plain_master_key = fscryptography.generate()
+
+with fscryptography.Manager(key=plain_master_key) as manager:
     manager.file.encrypt("informe.txt")
 ```
 
@@ -240,10 +242,14 @@ with fscryptography.Manager(key=master_key) as manager:
 Para cambiar a un contenedor protegido por contraseña:
 
 ```python
+current_password = obtain_password_from_secure_input()
 new_password = obtain_password_from_secure_input()
 protected_key = fscryptography.generate(password=new_password)
 
-with fscryptography.Manager(key=master_key) as manager:
+with fscryptography.Manager(
+    key=master_key,
+    password=current_password,
+) as manager:
     manager.change_key(
         protected_key,
         password=new_password,
