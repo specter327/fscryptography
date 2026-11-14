@@ -19,13 +19,7 @@ Se mantienen dos capas separadas de vectores golden:
 
 Los bytes de estas fixtures son vectores de conformidad de pruebas; nunca deben reutilizarse como claves de producción.
 
-La suite deberá ampliar y mantener vectores golden independientes de la implementación:
-- Contenedor aleatorio v1 válido con dos keysets de prueba válidos.
-- Contenedor protegido v1 válido con parámetros KDF de fixture deliberadamente modestos, nunca reutilizados como configuración de producción.
-- Cabeceras válidas de ambos modos con sus bytes AAD exactos.
-- Casos inválidos con un solo campo alterado para identificar el rechazo esperado.
-
-Los fixtures criptográficos deben ser reproducibles. La generación aleatoria de producción no debe sustituirse por valores deterministas; las fixtures solo pertenecen al entorno de pruebas.
+La suite Tink cubre ahora los vectores independientes requeridos: contenedor aleatorio y protegido, keysets válidos de ambos primitives, rechazo de primitive incorrecto y rechazo de Protobuf malformado. La suite estructural sintética permanece separada y usa parámetros Argon2id deliberadamente modestos; esos fixtures no se aceptan por el parser productivo.
 
 ## Matriz de conformidad estructural
 
