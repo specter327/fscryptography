@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -132,12 +133,6 @@ def test_tampered_file_preserves_ciphertext(manager, tmp_path):
 
     assert encrypted.exists()
     assert not source.exists()
-    records = manager.inspect_recovery(tmp_path)
-    assert any(
-        record.operation == "file_decrypt"
-        and record.classification == "result_incomplete_or_unverified"
-        for record in records
-    )
 
 
 def test_invalid_header_preserves_source(manager, tmp_path):
@@ -245,8 +240,7 @@ def test_encrypt_reports_sync_failure_after_source_removal(manager, tmp_path, mo
         monkeypatch.setattr(_filesystem.Transaction, "set_state", fail_after_source_unlink)
         expected_message = "injected failure after source removal"
     else:
-        # Windows persists the journal file but cannot fsync the parent directory.
-        # Inject a journal-state failure after the handle-based deletion instead.
+        # Inject an in-memory state-transition failure after handle-based deletion.
         original_set_state = _filesystem.Transaction.set_state
 
         def fail_after_source_unlink(transaction, state):
@@ -292,7 +286,7 @@ def test_source_replacement_during_retirement_is_restored(manager, tmp_path, mon
     rename_noreplace = _filesystem.DirectoryAnchor.rename_noreplace
 
     def replace_before_quarantine(anchor, source_name, destination_fd, destination_name):
-        if source_name == source.name and destination_name == "source":
+        if source_name == source.name and destination_name.startswith(".fscryptography-source-"):
             source.rename(retained_original)
             source.write_bytes(b"concurrent replacement")
         return rename_noreplace(anchor, source_name, destination_fd, destination_name)
@@ -304,37 +298,9 @@ def test_source_replacement_during_retirement_is_restored(manager, tmp_path, mon
     assert retained_original.read_bytes() == b"original source"
     assert source.read_bytes() == b"concurrent replacement"
     assert (tmp_path / "replacement.fscrypt").is_file()
-    assert any(
-        record.operation == "file_encrypt" and record.classification == "ambiguous"
-        for record in manager.inspect_recovery(tmp_path)
-    )
 
 
 @pytest.mark.skipif(os.name == "nt", reason="private quarantine is not enabled for inherited Windows ACLs")
-def test_recovery_inspection_reports_retained_source(manager, tmp_path, monkeypatch):
-    source = tmp_path / "interrupted.txt"
-    source.write_bytes(b"source retained for recovery")
-    original_set_state = _filesystem.Transaction.set_state
-
-    def interrupt_after_quarantine(self, state):
-        if state == "source_retained":
-            raise RuntimeError("injected interruption after quarantine")
-        return original_set_state(self, state)
-
-    monkeypatch.setattr(_filesystem.Transaction, "set_state", interrupt_after_quarantine)
-    with pytest.raises(AtomicOperationError, match="retirement is incomplete"):
-        manager.file.encrypt(source)
-
-    assert not source.exists()
-    assert (tmp_path / "interrupted.fscrypt").is_file()
-    records = manager.inspect_recovery(tmp_path)
-    assert any(
-        record.operation == "file_encrypt"
-        and record.classification == "source_retained"
-        for record in records
-    )
-
-
 @pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="directory descriptor anchoring is GNU/Linux-only")
 def test_operations_remain_anchored_when_parent_path_is_replaced(manager, tmp_path, monkeypatch):
     source = tmp_path / "anchored.txt"
@@ -358,21 +324,6 @@ def test_operations_remain_anchored_when_parent_path_is_replaced(manager, tmp_pa
     assert (moved_parent / "anchored.fscrypt").is_file()
     assert not (moved_parent / "anchored.txt").exists()
     assert list(tmp_path.iterdir()) == []
-    records = manager.inspect_recovery(moved_parent)
-    assert any(record.operation == "file_encrypt" and record.classification == "source_removed" for record in records)
-
-
-@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="descriptor-relative inspection is GNU/Linux-only")
-def test_recovery_inspection_does_not_follow_transaction_symlink(manager, tmp_path):
-    transaction_link = tmp_path / (".fscryptography-txn-" + "0" * 32)
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    (outside / "journal.json").write_text("not a journal", encoding="utf-8")
-    transaction_link.symlink_to(outside, target_is_directory=True)
-
-    records = manager.inspect_recovery(tmp_path)
-    assert len(records) == 1
-    assert records[0].classification == "corrupt"
 
 
 @pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="directory descriptor anchoring is GNU/Linux-only")
@@ -404,6 +355,99 @@ def test_directory_replacement_during_rename_is_restored(manager, tmp_path, monk
     assert not any(path.name.startswith("~1") for path in tmp_path.iterdir())
 
 
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="descriptor-relative directory anchoring is GNU/Linux-only")
+def test_directory_decrypt_rejects_replacement_during_rename(manager, tmp_path, monkeypatch):
+    source = tmp_path / "private-directory"
+    source.mkdir()
+    (source / "original.txt").write_text("original", encoding="utf-8")
+    manager.dir.encrypt(source)
+    encrypted = next(
+        path for path in tmp_path.iterdir()
+        if path.is_dir() and path.name.startswith("~1")
+    )
+    retained_original = tmp_path / "original-directory"
+    rename_noreplace = _filesystem.DirectoryAnchor.rename_noreplace
+    replaced = False
+
+    def replace_before_rename(anchor, source_name, destination_fd, destination_name):
+        nonlocal replaced
+        if source_name == encrypted.name and not replaced:
+            encrypted.rename(retained_original)
+            encrypted.mkdir()
+            (encrypted / "replacement.txt").write_text("replacement", encoding="utf-8")
+            replaced = True
+        return rename_noreplace(anchor, source_name, destination_fd, destination_name)
+
+    monkeypatch.setattr(_filesystem.DirectoryAnchor, "rename_noreplace", replace_before_rename)
+
+    with pytest.raises(InvalidPathError, match="directory identity changed"):
+        manager.dir.decrypt(encrypted)
+
+    assert replaced
+    assert (retained_original / "original.txt").read_text(encoding="utf-8") == "original"
+    assert (encrypted / "replacement.txt").read_text(encoding="utf-8") == "replacement"
+    assert not source.exists()
+
+
+def test_path_directory_rename_restores_replaced_source(tmp_path, monkeypatch):
+    source = tmp_path / "source-directory"
+    destination = tmp_path / "destination-directory"
+    retained_original = tmp_path / "original-directory"
+    source.mkdir()
+    (source / "original.txt").write_text("original", encoding="utf-8")
+    expected = source.lstat()
+    real_rename = os.rename
+    replaced = False
+
+    def replace_before_rename(old, new):
+        nonlocal replaced
+        if Path(old) == source and Path(new) == destination and not replaced:
+            source.rename(retained_original)
+            source.mkdir()
+            (source / "replacement.txt").write_text("replacement", encoding="utf-8")
+            replaced = True
+        return real_rename(old, new)
+
+    monkeypatch.setattr(_filesystem.os, "rename", replace_before_rename)
+
+    with pytest.raises(InvalidPathError, match="directory identity changed"):
+        _filesystem._rename_directory_checked_path(source, destination, expected)
+
+    assert replaced
+    assert (retained_original / "original.txt").read_text(encoding="utf-8") == "original"
+    assert (source / "replacement.txt").read_text(encoding="utf-8") == "replacement"
+    assert not destination.exists()
+
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="the name-based unlink race is specific to the GNU/Linux retirement path")
+def test_source_retirement_unlink_can_remove_same_directory_replacement(manager, tmp_path, monkeypatch):
+    source = tmp_path / "unlink-race.txt"
+    preserved_original = tmp_path / "original-retained.txt"
+    source.write_bytes(b"original source")
+    original_unlink = _filesystem.Transaction.unlink_retained
+    replaced = False
+
+    def replace_retained_entry(transaction):
+        nonlocal replaced
+        if not replaced:
+            retained = tmp_path / transaction.retained_name
+            retained.rename(preserved_original)
+            retained.write_bytes(b"concurrent replacement")
+            replaced = True
+        return original_unlink(transaction)
+
+    monkeypatch.setattr(_filesystem.Transaction, "unlink_retained", replace_retained_entry)
+    # The current name-based unlink removes the substituted entry and reports
+    # success; this test documents the limitation rather than asserting mitigation.
+    manager.file.encrypt(source)
+
+    assert replaced
+    assert preserved_original.read_bytes() == b"original source"
+    assert not any(path.name.startswith(".fscryptography-source-") for path in tmp_path.iterdir())
+    assert not source.exists()
+    assert (tmp_path / "unlink-race.fscrypt").is_file()
 
 def test_file_operations_reject_multiple_hard_links(manager, tmp_path):
     source = tmp_path / "shared.txt"
@@ -439,13 +483,10 @@ def test_encrypted_and_decrypted_files_use_restrictive_mode(manager, tmp_path):
     assert source.stat().st_mode & 0o777 == 0o600
     assert source.read_bytes() == b"private payload"
 
-    transaction_dirs = list(tmp_path.glob(".fscryptography-txn-*"))
-    assert transaction_dirs
-    for transaction_dir in transaction_dirs:
-        assert transaction_dir.stat().st_mode & 0o777 == 0o700
-        journal = transaction_dir / "journal.json"
-        if journal.exists():
-            assert journal.stat().st_mode & 0o777 == 0o600
+    assert not list(tmp_path.glob(".fscryptography-txn-*"))
+    assert not list(tmp_path.glob(".journal-*"))
+    assert not list(tmp_path.glob(".fscryptography-result-*"))
+    assert not list(tmp_path.glob(".fscryptography-source-*"))
 
 
 def test_reparse_point_attribute_detection():
