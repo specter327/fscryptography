@@ -229,7 +229,6 @@ Para proteger el contenido de un árbol de directorios, cada archivo debe proces
 
 ```python
 new_key = fscryptography.generate()
-new_password = obtain_password_from_secure_input()
 
 with fscryptography.Manager(key=master_key) as manager:
     manager.change_key(new_key)
