@@ -318,11 +318,14 @@ def test_operations_remain_anchored_when_parent_path_is_replaced(manager, tmp_pa
         return original_copy(primitive, src, dst, aad)
 
     monkeypatch.setattr(_filesystem, "_copy_encrypt", replace_parent_after_transaction)
-    manager.file.encrypt(source)
+    with pytest.raises(InvalidPathError, match="parent directory was replaced"):
+        manager.file.encrypt(source)
 
     assert replaced
-    assert (moved_parent / "anchored.fscrypt").is_file()
-    assert not (moved_parent / "anchored.txt").exists()
+    # The operation remains anchored to the original directory descriptor,
+    # but refuses to publish after its pathname has been replaced.
+    assert (moved_parent / "anchored.txt").read_bytes() == b"anchored payload"
+    assert not (moved_parent / "anchored.fscrypt").exists()
     assert list(tmp_path.iterdir()) == []
 
 
