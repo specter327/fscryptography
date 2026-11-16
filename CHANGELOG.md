@@ -4,6 +4,8 @@ Los cambios de API, formatos, compatibilidad y seguridad se registran aquí. Las
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-11-16
+
 ### Added
 - Endurecimiento de concurrencia, transacciones, publicación sin reemplazo y retirada segura del origen.
 - Validación de metadatos del filesystem, nombres Unicode, límites UTF-16 de Windows, PathLike y rutas largas.
