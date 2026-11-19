@@ -1,184 +1,162 @@
-# Propuesta: backend criptográfico para Termux
+# Propuesta: backend criptográfico transparente para Termux
 
 ## Estado
 
-**Propuesta de arquitectura. No implementada. No habilita todavía soporte Android/Termux.**
+**Propuesta corregida. No implementada. No declara soporte Termux.**
 
-## Contexto y decisión que motiva esta propuesta
+Esta propuesta está subordinada a una restricción invariable: el cambio de backend debe ser imperceptible para quien utiliza fscryptography.
 
-El backend actual depende directamente de Google Tink. Tink se compila desde fuente en el entorno Termux observado y su instalación requiere Protobuf y Bazel. En el dispositivo de validación:
+## Requisitos no negociables
 
-- Se corrigió el enlace dinámico de Protobuf actualizando `libc++` y reinstalando `protobuf`.
-- `protoc --version` ya funciona y devuelve `libprotoc 36.2`.
-- La instalación de `tink==1.16.1` avanza hasta la fase de preparación de build, pero falla porque no encuentra un ejecutable Bazel.
-- Termux ofrece un paquete Bazel ARM64, pero hacer depender la instalación cotidiana de una compilación de Tink con Bazel no satisface el objetivo de distribución simple.
+La implementación para Termux:
 
-La decisión propuesta es dejar de exigir Tink en instalaciones Termux nuevas y desarrollar un backend alternativo específico para Termux. No se pretende reemplazar ni reinterpretar silenciosamente los formatos existentes.
+1. **No modifica la API pública:** no añade, elimina ni cambia funciones, clases, métodos, argumentos, propiedades, excepciones documentadas ni valores de retorno.
+2. **No modifica las capacidades:** todas las operaciones y garantías disponibles en las plataformas actuales deben seguir disponibles en Termux.
+3. **No modifica los formatos persistentes:** MasterKey, contenido cifrado, nombres y metadatos conservan sus formatos, versiones, reglas de serialización y semántica actuales.
+4. **No requiere migración:** los datos existentes se abren y procesan sin conversión, exportación ni intervención del usuario.
+5. **No expone selección de backend:** no añade opciones, marcadores, configuración ni decisiones de plataforma a la API o al flujo de uso.
+6. **No altera el comportamiento observable:** errores, validaciones, integridad, atomicidad, límites y semántica de las operaciones deben mantenerse equivalentes.
+7. **No reduce la seguridad:** no se relajan algoritmos, tamaños de clave, derivación, autenticación, validaciones ni tratamiento de errores.
 
-## Objetivos
+La única diferencia permitida es interna: la implementación concreta que proporciona las primitivas criptográficas en Termux.
 
-1. Instalar y ejecutar fscryptography en Termux sin exigir Tink ni Bazel al usuario final.
-2. Mantener la API pública de fscryptography.
-3. Mantener un backend Tink para leer y operar con los contenedores y datos existentes.
-4. Identificar inequívocamente el backend y el perfil criptográfico usados por cada formato persistente.
-5. Permitir que una instalación pueda abrir datos creados por otro backend cuando exista un lector compatible.
-6. Evitar implementaciones criptográficas caseras y cambios de algoritmo sin revisión.
-7. Aislar la selección del backend del código de operaciones del filesystem.
+## Contexto técnico
 
-## Fuera de alcance
+El runtime actual depende de Google Tink. Los keysets Tink para contenido (`AES256_GCM_HKDF_1MB`) y nombres (`AES256_GCM`) se serializan dentro de MasterKey v1.0. Además, fscryptography utiliza las primitivas abiertas desde esos keysets y emplea `cryptography` AES-GCM y `argon2-cffi` Argon2id para la protección opcional por contraseña.
 
-- Declarar Android completo como plataforma soportada. El alcance inicial es Termux en Android ARM64.
-- Cambiar el formato Tink existente o invalidar MasterKey v1.0.
-- Hacer migraciones automáticas o destructivas.
-- Reducir tamaños de clave, requisitos de autenticación o parámetros de derivación de claves para facilitar la instalación.
-- Prometer compatibilidad con cualquier versión de Android, Termux, Python o arquitectura antes de probarla.
+Por tanto, sustituir Tink por una biblioteca con primitivas distintas, aunque sean criptográficamente seguras, no preserva automáticamente los datos ni el comportamiento actuales.
 
-## Propuesta arquitectónica
+En Termux se reparó el enlace de Protobuf: `protoc --version` devuelve `libprotoc 36.2`. La instalación aislada de `tink==1.16.1` continúa requiriendo Bazel. El objetivo es evitar que la instalación normal del usuario dependa de ese toolchain, sin trasladar el coste a cambios de API o de formato.
 
-### 1. Contrato interno de backend
+## Estrategia: implementación alternativa compatible
 
-Introducir una interfaz interna independiente del filesystem y de la serialización concreta. El contrato debe exponer las operaciones criptográficas que realmente necesita el dominio:
+Investigar una implementación interna específica para Termux que proporcione las mismas primitivas y respete exactamente los contratos actuales de Tink.
 
-- creación y restauración de material de claves;
-- AEAD para nombres/metadatos;
-- cifrado autenticado de contenido en streaming;
-- cifrado autenticado para envolver/proteger material de claves;
-- identificación estable del backend y del perfil criptográfico;
-- validación estricta de parámetros y errores de autenticación.
+No se trata de diseñar un segundo formato criptográfico para fscryptography. Se trata de proporcionar, mediante un proveedor distinto, compatibilidad con el formato y las operaciones existentes.
 
-El contrato no debe exponer tipos de Tink, PyNaCl ni de otra biblioteca. Los adaptadores convierten entre tipos específicos de proveedor y el contrato interno.
+### Compatibilidad obligatoria
 
-Las capas de filesystem y de gestión de archivos no deben conocer qué backend está activo.
+El backend alternativo deberá preservar:
 
-### 2. Backends iniciales
+- La lectura y escritura de los keysets serializados actualmente en MasterKey v1.0.
+- Los tipos de keyset, identificadores, parámetros y reglas de serialización que utiliza el proyecto.
+- La semántica y el formato binario de AES256_GCM para nombres.
+- La semántica y el formato binario de AES256_GCM_HKDF_1MB para contenido en streaming.
+- La protección de MasterKey con contraseña: Argon2id, parámetros, salt, nonce, AES-GCM, AAD y estructura persistida actuales.
+- Los límites, errores de autenticación, detección de corrupción y comportamiento ante entradas inválidas.
+- La interoperabilidad cruzada: datos creados en Termux deben poder abrirse en las plataformas actuales y viceversa, usando la implementación estándar existente.
 
-**TinkBackend**
-- Conserva la implementación actual y la lectura de los keysets serializados en MasterKey v1.0.
-- Se mantiene como backend de compatibilidad y como opción para los entornos donde Tink se instala de forma reproducible.
-- No se debe eliminar mientras existan datos que dependan de él.
+No se aceptará compatibilidad basada únicamente en que ambas bibliotecas implementen AES-GCM. Deben coincidir los detalles completos de los formatos, derivación, framing, nonces, AAD y serialización.
 
-**TermuxBackend (nombre provisional)**
-- Backend alternativo para nuevas MasterKeys y nuevos datos creados en Termux.
-- No debe depender de Google Tink ni de Bazel.
-- Debe utilizar primitivas de una biblioteca criptográfica mantenida y revisada.
-- Candidato inicial a evaluar: libsodium mediante sus bindings Python mantenidos (por ejemplo, PyNaCl), especialmente las interfaces AEAD y secretstream. Esta elección es una hipótesis de implementación, no una decisión cerrada: primero deben verificarse disponibilidad, mantenimiento, instalación reproducible y soporte real en Termux/Bionic.
-- No implementar un protocolo de streaming propio basado en concatenar llamadas AES-GCM sin especificación formal, análisis de nonce, framing, autenticación de orden/truncamiento y revisión criptográfica.
+### Proveedores candidatos
 
-La elección definitiva de proveedor y algoritmos queda bloqueada hasta completar una prueba de viabilidad en Termux y una revisión de seguridad del diseño.
+Se pueden evaluar libsodium/PyNaCl, PyCA/cryptography u otros proveedores mantenidos como fuentes de primitivas de bajo nivel.
 
-### 3. Selección del backend
+La biblioteca candidata no define el formato de fscryptography. Por ejemplo, la interfaz `secretstream` de libsodium no puede reemplazar directamente el formato Tink Streaming AEAD. Solo se podrá utilizar si una implementación demuestra compatibilidad exacta con el contrato y el formato actuales; no se permitirá introducir un framing incompatible.
 
-La selección debe ser explícita al crear datos nuevos y determinada por metadatos autenticados al abrir datos existentes.
+Si no existe una implementación alternativa viable que preserve esos contratos, se deberá resolver la distribución/instalación de Tink en Termux (por ejemplo, mediante artefactos binarios compatibles o un proceso de empaquetado reproducible). No se cambiará la API ni el formato para sortear el problema de instalación.
 
-- La detección de plataforma puede proponer un backend predeterminado para nuevas instalaciones Termux.
-- La detección de plataforma nunca debe decidir cómo descifrar un archivo existente.
-- El identificador persistido de backend/perfil determina qué lector debe abrir cada objeto.
-- Si el backend indicado no está instalado, se devuelve un error claro de backend no disponible. No se intenta otro backend silenciosamente.
-- Debe existir una opción explícita para seleccionar backend cuando la API pública lo necesite, sin filtrar tipos internos de proveedor.
+## Arquitectura interna
 
-### 4. Versionado y compatibilidad de formatos
+- Mantener intactas las capas públicas y de dominio.
+- Introducir, solo si el inventario demuestra que es necesario, una frontera interna para las operaciones criptográficas actualmente acopladas a Tink.
+- Mantener el backend estándar actual como referencia de comportamiento y compatibilidad.
+- Implementar el proveedor Termux detrás de esa frontera, sin filtrar tipos ni conceptos del proveedor.
+- Seleccionar la implementación internamente mediante disponibilidad/entorno de ejecución, sin almacenar esa selección en los datos ni exponerla al usuario.
+- Al abrir datos, interpretar siempre el formato existente; nunca elegir un formato según la plataforma.
+- Si el backend alternativo no puede interpretar o producir exactamente el formato actual, debe fallar la validación de viabilidad y no activarse.
 
-El formato actual que serializa keysets Tink no es intercambiable con material de claves de otro proveedor.
-
-Se propone:
-
-- Mantener MasterKey v1.0 como formato Tink legacy, con lector compatible.
-- Definir una nueva versión de MasterKey para el nuevo backend. Debe incluir versión, identificador de backend, identificador de perfil criptográfico, parámetros necesarios y material de claves protegido.
-- Versionar también el formato de contenido y el formato de nombres si sus estructuras o primitivas cambian.
-- Los identificadores de algoritmo/perfil deben ser constantes registradas, no nombres de clases Python ni versiones de paquetes.
-- Los metadatos que controlan la interpretación del formato deben quedar autenticados.
-- Rechazar versiones, perfiles, parámetros o identificadores desconocidos; nunca degradar silenciosamente a otro algoritmo.
-
-No se debe asumir que basta con cambiar la serialización de keysets: el cifrado de contenido, el streaming, los nombres y el envoltorio de MasterKey también deben quedar especificados.
-
-### 5. Compatibilidad y migración
-
-- Los objetos Tink existentes deben seguir abriéndose mediante TinkBackend.
-- TermuxBackend solo crea objetos con el nuevo formato/perfil.
-- La migración, si se implementa, será una operación explícita, con origen y destino identificados, verificación de integridad y preservación del original hasta confirmar el resultado.
-- No se realizará conversión in-place implícita al abrir.
-- Deben existir vectores de interoperabilidad que permitan comprobar apertura entre plataformas y versiones del paquete.
-
-## Dependencias y distribución
-
-La meta es que la instalación Termux no necesite Bazel ni un compilador para instalar Tink. Eso no significa que cualquier binding alternativo sea automáticamente instalable: PyNaCl u otro candidato puede tener dependencias nativas.
-
-Antes de adoptarlo se debe probar:
-
-1. Disponibilidad de la biblioteca nativa en los repositorios Termux oficiales.
-2. Disponibilidad de wheel compatible o procedimiento de build reproducible para CPython/Android ABI.
-3. Instalación desde un entorno Termux limpio.
-4. Ejecución de primitivas en Android ARM64/Bionic.
-5. Ausencia de dependencias de compilación en el camino normal de instalación, si se distribuye un wheel adecuado.
-
-Las dependencias deben declararse por extra o marcador de plataforma solo después de validar el mecanismo de instalación. No se deben añadir marcadores especulativos ni hacer que Termux instale Tink innecesariamente.
+La detección de plataforma puede seleccionar una implementación interna, pero nunca puede cambiar el algoritmo, el formato, la semántica o el resultado observable.
 
 ## Plan de trabajo
 
-### Fase 0 — Inventario del contrato actual
-- Revisar todos los usos directos de Tink y los formatos persistentes.
-- Identificar las operaciones requeridas por nombres, contenido y MasterKey.
-- Documentar invariantes, límites, tamaños, AAD, framing y errores.
-- Añadir pruebas de caracterización del backend actual sin cambiar su comportamiento.
+### Fase 0 — Inventario y caracterización
 
-### Fase 1 — Prueba de viabilidad de proveedor
-- Evaluar libsodium/PyNaCl y, si no cumple los requisitos de Termux, comparar alternativas mantenidas.
-- Probar instalación en Termux limpio con la versión de Python objetivo.
-- Probar AEAD, secretstream, manejo de errores y disponibilidad de RNG seguro.
-- Registrar versiones exactas, ABI, arquitectura y comandos reproducibles.
-- No integrar el candidato en el runtime todavía.
+- Revisar todos los usos directos de Tink y de sus primitivas.
+- Identificar exactamente los formatos persistentes y sus invariantes.
+- Registrar key templates, keysets, parámetros, AAD, framing, nonces, límites y excepciones.
+- Crear o consolidar vectores de caracterización con la implementación estándar.
+- Registrar el comportamiento público actual mediante pruebas de caracterización.
+- No modificar runtime, API, dependencias ni formatos en esta fase.
 
-### Fase 2 — Especificación criptográfica y de formatos
-- Especificar perfiles y formatos versionados para MasterKey, contenido y nombres.
-- Definir derivación de claves, nonces, AAD, framing, detección de truncamiento/reordenamiento y límites de tamaño.
-- Definir comportamiento ante corrupción, autenticación fallida y parámetros inválidos.
-- Solicitar revisión de seguridad antes de implementar el formato de producción.
+### Fase 1 — Viabilidad del proveedor
 
-### Fase 3 — Abstracción y adaptadores
-- Introducir el contrato interno.
-- Adaptar Tink sin cambiar bytes ni semántica de los formatos actuales.
-- Implementar el backend alternativo solo contra la especificación aprobada.
-- Mantener las capas superiores libres de dependencias de proveedor.
+- Comprobar instalación de candidatos en Termux ARM64/Bionic y en la versión de CPython objetivo.
+- Verificar disponibilidad de RNG seguro y primitivas requeridas.
+- Probar si el candidato permite reproducir los formatos exactos existentes.
+- Registrar versiones, ABI, comandos y resultados reproducibles.
+- Descartar cualquier candidato que requiera cambiar formatos o semántica.
+- No activar el candidato en el runtime todavía.
 
-### Fase 4 — Formatos, pruebas y migración
-- Implementar lectores/escritores versionados.
-- Crear vectores de prueba fijos y pruebas cruzadas entre plataformas.
-- Probar compatibilidad legacy Tink y rechazo seguro de formatos desconocidos.
-- Implementar migración explícita únicamente después de validar los lectores y escritores.
+### Fase 2 — Especificación de equivalencia
 
-### Fase 5 — Distribución y soporte Termux
-- Definir dependencias y extras por plataforma con evidencia de instalación.
-- Construir y probar wheels cuando sea posible.
-- Ejecutar la suite criptográfica en Termux ARM64/Bionic y las pruebas filesystem en almacenamiento privado.
-- Documentar por separado límites del almacenamiento compartido de Android.
-- Declarar soporte solo para las combinaciones de Android, Termux, Python y arquitectura probadas.
+Para cada operación criptográfica, definir pruebas diferenciales contra la implementación estándar:
+
+- apertura de keysets existentes;
+- cifrado y descifrado AEAD de nombres;
+- cifrado y descifrado Streaming AEAD;
+- protección y apertura de MasterKey con y sin contraseña;
+- interoperabilidad bidireccional entre backend estándar y backend Termux;
+- errores por autenticación fallida, corrupción, truncamiento y parámetros inválidos.
+
+Los vectores deben incluir datos vacíos, pequeños y grandes, límites de segmentos, nombres Unicode y casos negativos. La equivalencia debe comprobarse a nivel de formato y semántica, no solo mediante round-trip dentro del mismo backend.
+
+### Fase 3 — Adaptación interna
+
+- Implementar la frontera interna mínima que exija el código real.
+- Mantener sin cambios los contratos públicos.
+- Adaptar el backend estándar sin modificar sus bytes ni su semántica.
+- Implementar el proveedor Termux únicamente contra la especificación de equivalencia aprobada.
+- No introducir identificadores de backend en archivos ni nuevas versiones de formato.
+- No añadir configuración pública para seleccionar proveedores.
+
+### Fase 4 — Validación integral
+
+- Ejecutar las pruebas de caracterización y la suite existente.
+- Ejecutar pruebas diferenciales e interoperabilidad cruzada en ambos sentidos.
+- Verificar que la API pública y sus firmas no cambiaron.
+- Verificar que no se alteraron capacidades, límites ni comportamiento de filesystem.
+- Probar instalación limpia en Termux sin exigir Bazel al usuario final.
+- Ejecutar pruebas de filesystem en almacenamiento privado y documentar por separado los límites del almacenamiento compartido de Android.
+- Someter el diseño y la implementación criptográfica a revisión de seguridad.
+
+### Fase 5 — Distribución y soporte
+
+- Declarar dependencias por plataforma solo con evidencia reproducible.
+- Evitar que Termux instale Tink si el proveedor alternativo compatible puede operar sin él.
+- No declarar soporte hasta superar todos los criterios de aceptación.
+- Mantener la matriz de plataformas y versiones probadas.
 
 ## Criterios de aceptación
 
-La propuesta no se considera implementada hasta que:
+La implementación solo se acepta si se cumplen todos estos puntos:
 
-- Tink no sea necesario para instalar el backend Termux.
-- La instalación sea reproducible en un Termux limpio sin intervención manual no documentada.
-- Los formatos legacy Tink sigan siendo legibles en plataformas con Tink disponible.
-- Los formatos nuevos identifiquen y autentiquen su backend/perfil.
-- Existan vectores de prueba y pruebas negativas para autenticación, corrupción, truncamiento y parámetros inválidos.
-- Se hayan probado archivos vacíos, pequeños y grandes, nombres Unicode, integridad y errores de filesystem.
-- Una revisión de seguridad apruebe el diseño criptográfico y el formato.
-- La distribución no requiera Bazel en el dispositivo usuario.
+- No hay cambios en la API pública ni en sus firmas.
+- No hay cambios en las capacidades ni en las garantías documentadas.
+- No hay cambios en los formatos, versiones ni bytes estructurales persistidos.
+- Los datos preexistentes se abren en Termux sin migración.
+- Los datos creados en Termux se abren en las plataformas existentes, y viceversa.
+- La suite criptográfica y las pruebas diferenciales pasan.
+- Los resultados y errores observables conservan la semántica actual.
+- La instalación limpia de Termux no exige al usuario instalar Bazel ni un toolchain de compilación.
+- No se han relajado controles ni garantías de seguridad.
+- La revisión de seguridad aprueba la equivalencia criptográfica.
 
-## Riesgos y decisiones pendientes
+## Decisiones y límites
 
-| Tema | Estado |
+| Tema | Decisión |
 |---|---|
-| Proveedor alternativo | Pendiente de prueba; libsodium/PyNaCl es candidato |
-| Disponibilidad de bindings en Termux | No verificada |
-| Algoritmos y perfiles definitivos | Pendientes de especificación/revisión |
-| Nuevo formato MasterKey | Requerido; diseño pendiente |
-| Nuevo formato de contenido/nombres | Requerido si cambia la primitiva o estructura |
-| Lectura legacy Tink | Requisito obligatorio |
-| Migración entre backends | Explícita y posterior; no incluida en la primera entrega |
-| Android fuera de Termux | Fuera del alcance inicial |
+| API pública | Inmutable |
+| Capacidades | Inmutables |
+| Formatos persistentes | Inmutables |
+| Migración de datos | No requerida ni introducida |
+| Selección de backend por usuario | No existe |
+| Selección interna por plataforma | Permitida solo si es transparente |
+| Tink | Referencia de compatibilidad y backend estándar |
+| libsodium/PyNaCl | Candidatos no validados; no implican cambio de formato |
+| Bazel en instalación final | Debe evitarse |
+| Si no se logra equivalencia | Resolver empaquetado/distribución de Tink; no cambiar contratos |
 
 ## Decisión solicitada
 
-Aprobar la dirección arquitectónica de desarrollar un backend alternativo específico para Termux, manteniendo Tink como backend legacy/interoperable, y autorizar únicamente la fase de inventario y prueba de viabilidad del proveedor. La selección final del algoritmo, el formato nuevo y la implementación quedan condicionados a resultados reproducibles y revisión de seguridad.
+Autorizar el inventario del contrato actual y la prueba de viabilidad de proveedores con el requisito de equivalencia transparente. No autorizar cambios de API, capacidades, formatos, migraciones ni algoritmos incompatibles. La implementación solo podrá avanzar si demuestra interoperabilidad exacta con los datos y operaciones actuales.
