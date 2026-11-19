@@ -26,7 +26,17 @@ La librería no debe inferir compatibilidad por el mero hecho de que Python o un
 
 La matriz anterior define el alcance que debe cubrir la validación; **no constituye una declaración de soporte ya alcanzado**.
 
-### Fuera de la matriz inicial
+### Evaluación adicional: Android / Termux
+
+Android/Termux es un objetivo de compatibilidad en evaluación, no una plataforma soportada actualmente. La evaluación y el procedimiento reproducible están documentados en [Android y Termux](android-termux-compatibility.md).
+
+La instalación reportada con CPython 3.14 falla durante la compilación de Tink porque el ejecutable `protoc` del entorno Termux no puede enlazar con la versión disponible de `libc++`. Este fallo sucede antes de importar fscryptography y no demuestra por sí mismo una incompatibilidad del código de la librería.
+
+La integración actual usa keysets Tink serializados dentro de MasterKey v1.0. Sustituir Tink por otra implementación sin versionar el formato rompería la compatibilidad de claves existentes. La prioridad es validar la compilación/instalación de Tink en Termux; cualquier backend alternativo requiere un formato versionado y una estrategia de migración.
+
+Hasta completar instalación limpia, pruebas criptográficas, round-trip de filesystem e integridad en Android, no se debe anunciar soporte para Android, Termux, ARM64 ni CPython 3.14.
+
+## Fuera de la matriz inicial
 
 - Windows 10: no se declara soportado en v1.
 - macOS: fuera de alcance inicial; podrá evaluarse después.
