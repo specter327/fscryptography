@@ -166,10 +166,25 @@ La evaluación práctica posterior cambió la decisión de ruta:
 - La instalación aislada de `tink==1.16.1` avanzó hasta la preparación del build, pero se detuvo porque no encontró el ejecutable Bazel.
 - El repositorio Termux consultado ofrece Bazel `9.3.2` para ARM64. Su mera disponibilidad no demuestra que esa versión sea compatible con el proceso de compilación de Tink 1.16.1 ni que el build completo vaya a ser mantenible.
 
-Dado que exigir al usuario final que instale y mantenga un toolchain de compilación pesado no satisface el objetivo de distribución de fscryptography, se propone investigar un backend alternativo específico para Termux. La propuesta está documentada en [Propuesta: backend criptográfico para Termux](termux-backend-proposal.md).
+Dado que exigir al usuario final que instale y mantenga un toolchain de compilación pesado no satisface el objetivo de distribución de fscryptography, se propone investigar una implementación interna alternativa para Termux. Esta implementación queda sujeta a equivalencia estricta con el backend actual; no constituye un formato criptográfico alternativo.
 
 Esta dirección **sustituye la recomendación anterior de priorizar indefinidamente la compilación de Tink en Termux**. No elimina la necesidad de conservar Tink para leer MasterKey v1.0 y los datos existentes.
 
-El candidato inicial para evaluación es libsodium mediante bindings Python mantenidos, pero no se ha verificado todavía su instalación ni su ejecución en Termux. No se autoriza aún un algoritmo, formato nuevo ni cambio de runtime: primero corresponden el inventario de los formatos actuales y una prueba de viabilidad reproducible del proveedor.
+libsodium/PyNaCl y otros proveedores son únicamente candidatos para suministrar primitivas. No se autoriza cambiar algoritmos, API, capacidades, formatos persistentes, serialización, semántica ni comportamiento observable. El backend Termux deberá leer y escribir exactamente los formatos actuales y demostrar interoperabilidad bidireccional con el backend estándar. No se añadirán identificadores de backend a los datos, nuevas versiones de formato, migraciones ni opciones de selección para el usuario. Si no es posible demostrar esa equivalencia, deberá resolverse el empaquetado/distribución de Tink para Termux en lugar de cambiar los contratos existentes.
 
 El alcance inicial queda limitado a Termux en Android ARM64. No se declara soporte Android general ni soporte Termux hasta superar los criterios de aceptación de la propuesta.
+
+
+## Restricción de transparencia — aclaración del 2026-11-19
+
+La propuesta de backend queda corregida por el requisito de que el cambio sea imperceptible para el usuario:
+
+- API pública y firmas: sin cambios.
+- Características, capacidades y garantías: sin cambios.
+- MasterKey, keysets, contenido cifrado, nombres y metadatos: formatos y serialización existentes, sin migración.
+- Uso, configuración, errores y semántica observable: sin cambios.
+- Solo se permite sustituir internamente la implementación criptográfica en Termux, y únicamente si reproduce exactamente los contratos actuales y supera pruebas de interoperabilidad cruzada.
+
+Queda descartado introducir un formato MasterKey nuevo, formatos separados de contenido/nombres, identificadores persistentes de backend, selección pública de backend o migraciones. La propuesta detallada y sus criterios de equivalencia están en [Propuesta: backend criptográfico transparente para Termux](termux-backend-proposal.md).
+
+Si no puede implementarse un proveedor alternativo compatible byte a byte y semánticamente, la alternativa será distribuir/instalar Tink de forma reproducible en Termux. No se cambiará el contrato de fscryptography para acomodar las limitaciones de una dependencia.
