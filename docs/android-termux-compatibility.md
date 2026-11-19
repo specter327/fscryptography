@@ -155,3 +155,21 @@ No usar datos originales: las operaciones transforman archivos in-place.
 ## Resultado de esta fase
 
 Se ha identificado que el acoplamiento con Tink atraviesa la serialización de MasterKey v1.0, por lo que una sustitución de backend no es un cambio local. El primer bloqueo observado es el entorno de compilación/enlace de protobuf en Termux. La siguiente acción técnicamente correcta es reparar y aislar el toolchain Termux y probar cada dependencia por separado; después se puede decidir con evidencia si hace falta una abstracción de backend.
+
+
+## Actualización de decisión — 2026-11-19
+
+La evaluación práctica posterior cambió la decisión de ruta:
+
+- Se ejecutó `pkg reinstall libc++ protobuf` en Termux.
+- `protoc --version` pasó a funcionar y devolvió `libprotoc 36.2`.
+- La instalación aislada de `tink==1.16.1` avanzó hasta la preparación del build, pero se detuvo porque no encontró el ejecutable Bazel.
+- El repositorio Termux consultado ofrece Bazel `9.3.2` para ARM64. Su mera disponibilidad no demuestra que esa versión sea compatible con el proceso de compilación de Tink 1.16.1 ni que el build completo vaya a ser mantenible.
+
+Dado que exigir al usuario final que instale y mantenga un toolchain de compilación pesado no satisface el objetivo de distribución de fscryptography, se propone investigar un backend alternativo específico para Termux. La propuesta está documentada en [Propuesta: backend criptográfico para Termux](termux-backend-proposal.md).
+
+Esta dirección **sustituye la recomendación anterior de priorizar indefinidamente la compilación de Tink en Termux**. No elimina la necesidad de conservar Tink para leer MasterKey v1.0 y los datos existentes.
+
+El candidato inicial para evaluación es libsodium mediante bindings Python mantenidos, pero no se ha verificado todavía su instalación ni su ejecución en Termux. No se autoriza aún un algoritmo, formato nuevo ni cambio de runtime: primero corresponden el inventario de los formatos actuales y una prueba de viabilidad reproducible del proveedor.
+
+El alcance inicial queda limitado a Termux en Android ARM64. No se declara soporte Android general ni soporte Termux hasta superar los criterios de aceptación de la propuesta.
