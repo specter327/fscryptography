@@ -120,3 +120,10 @@ References:
 Tink's documentation recommends AES-128-GCM-HKDF 1 MiB for most use cases, but explicitly lists AES-256-GCM-HKDF 1 MiB as an available profile. Retaining AES-256 is therefore possible in the documented construction, although the project should not claim it is the default recommendation of Tink.
 
 **Still unverified:** current PyPI wheel coverage, supported Python versions, build-from-source requirements, and successful installation/execution under Android/Termux and all desktop targets. A language support matrix does not establish packaging support for every OS/CPU/Python ABI. An older Python installation guide lists a limited set of Linux/macOS wheels and is not sufficient evidence for current releases or Android support. This must be tested against the exact package release selected by the project.
+
+
+## 8. Decision on the proposed per-block nonce scheme
+
+The project proposal of a 96-bit AES-GCM nonce per block, a block counter, a random resource/operation identifier, and AAD binding the block position is recorded as a requirement to evaluate, but **is not approved as a project-authored protocol**. A random identifier plus a counter does not by itself prove nonce uniqueness across multiple files, repeated operations, concurrent processes, retries, and restarts when a key is reused. Implementing this safely would require a complete key-separation and usage-bound analysis. The preferred course is to delegate segment framing, per-stream key derivation, nonce construction, position binding, and finalization to the selected established Streaming AEAD implementation. The project-specific format should remain an outer identification/version layer only, unless further reviewed requirements justify more.
+
+The public requirement remains AES-256-GCM unless the project explicitly approves a change. Tink's AES-256-GCM-HKDF profile is a candidate, not yet a dependency selection. The 1 MiB proposal is subject to the actual implementation's segment-size/profile semantics; it must not be assumed that an application-level configurable block size can arbitrarily alter a fixed cryptographic profile.
