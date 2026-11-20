@@ -46,6 +46,7 @@ Decryption removes exactly the final suffix. Original names and extensions remai
 - [Filesystem and transaction behavior](docs/specification/filesystem-behavior.md)
 - [Cryptographic design requirements](docs/specification/cryptographic-requirements.md)
 - [Streaming encryption construction review](docs/research/streaming-encryption-review.md)
+- [Platform dependency feasibility review](docs/research/platform-dependency-feasibility.md)
 - [Open design decisions](docs/specification/open-decisions.md)
 
 ## Cryptographic direction
