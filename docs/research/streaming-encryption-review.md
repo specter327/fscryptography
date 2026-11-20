@@ -104,3 +104,19 @@ Do not derive a key by hashing the password once, and do not silently change KDF
 - What exact stable password-derivation profile can be supported across all targets?
 
 Until these are answered with reproducible evidence, the cryptographic protocol and dependency remain unapproved.
+
+
+## 7. Python support verification (documentation review)
+
+The official Tink language-support matrix lists Streaming AEAD for Python. Tink's Python documentation demonstrates the `streaming_aead` module and the StreamingAead primitive. The documented key-template set includes `AES256_GCM_HKDF_1MB`. Therefore, Python-level support for the required primitive/profile is evidenced; this is stronger than the initial assumption that only a generic Tink implementation might exist.
+
+References:
+
+- https://developers.google.com/tink/supported-key-types
+- https://developers.google.com/tink/streaming-aead
+- https://fuchsia.googlesource.com/third_party/tink/+/refs/heads/main/docs/PYTHON-HOWTO.md
+- https://fuchsia.googlesource.com/third_party/tink/+/8e5717cd1bb7897b8462e56e7abeeec0f7bf9ffb/testing/cross_language/util/supported_key_types.py
+
+Tink's documentation recommends AES-128-GCM-HKDF 1 MiB for most use cases, but explicitly lists AES-256-GCM-HKDF 1 MiB as an available profile. Retaining AES-256 is therefore possible in the documented construction, although the project should not claim it is the default recommendation of Tink.
+
+**Still unverified:** current PyPI wheel coverage, supported Python versions, build-from-source requirements, and successful installation/execution under Android/Termux and all desktop targets. A language support matrix does not establish packaging support for every OS/CPU/Python ABI. An older Python installation guide lists a limited set of Linux/macOS wheels and is not sufficient evidence for current releases or Android support. This must be tested against the exact package release selected by the project.
