@@ -49,11 +49,12 @@ Decryption removes only the final `.fscrypt` suffix. Original names and extensio
 - [Public API contract](docs/specification/public-api.md)
 - [Filesystem and transaction behavior](docs/specification/filesystem-behavior.md)
 - [Cryptographic design requirements](docs/specification/cryptographic-requirements.md)
+- [Streaming encryption construction review](docs/research/streaming-encryption-review.md)
 - [Open design decisions](docs/specification/open-decisions.md)
 
 ## Security status
 
-The proposed cryptographic direction is AES-256-GCM with authenticated encryption (AEAD), 96-bit nonces, per-block sequence information, and authenticated block position. This is a design proposal, **not an approved wire format or a completed security protocol**. Nonce uniqueness, key derivation, per-key usage limits, framing, truncation detection, and cross-platform behavior must be specified and reviewed before implementation.
+The current cryptographic requirement is AES-256-GCM, but the project now prefers evaluating an established Streaming AEAD construction (Tink AES-256-GCM-HKDF 1 MiB profile) rather than designing its own block protocol. This remains conditional on proving dependency and API support across all target platforms. No wire format or dependency is approved yet. See the [construction review](docs/research/streaming-encryption-review.md).
 
 Base64 is an encoding for convenient serialization and transport. It does not protect or conceal key material: anyone who obtains a serialized secret key can use it.
 
