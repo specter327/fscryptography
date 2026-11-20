@@ -22,15 +22,16 @@ This register separates requirements already stated by the project from details 
 
 ### A. Cryptographic protocol
 
-- Adopt an existing authenticated streaming/file-encryption construction or define a reviewed custom container?
-- Exact container magic, versioning, field encodings, and canonical parser rules.
-- Exact AES-GCM nonce allocation strategy across resources and processes.
-- Per-resource subkey derivation strategy, if used.
-- AAD field layout and authentication coverage.
-- Final authenticated record and truncation-detection design.
-- GCM tag length and supported profile identifiers.
-- Maximum block count, file size, and aggregate data per key.
-- Retry and interrupted-operation nonce behavior.
+- **Preferred candidate:** Google Tink Streaming AEAD, AES-256-GCM-HKDF 1 MiB profile, subject to verification that the required Python implementation exposes the profile and works on every target platform.
+- **Alternative only with explicit algorithm approval:** libsodium secretstream (XChaCha20-Poly1305); it does not satisfy the current AES-256-GCM direction.
+- Do not implement a project-authored AES-GCM segment protocol as the default workaround.
+- Decide whether the selected established format already provides sufficient self-description or whether a minimal outer file identifier/version is required.
+- Confirm exact profile identifiers, key size, tag size, segment sizing, framing, and canonical parser behavior from the selected implementation/specification.
+- Confirm final-stream validation and ensure the filesystem layer does not publish staged plaintext until it succeeds.
+- Confirm maximum stream size, segment count, and per-key usage limits from the selected construction.
+- Confirm how malformed trailing data, truncated streams, and unsupported versions are rejected.
+
+The comparative evaluation and rationale are recorded in [Streaming encryption construction review](../research/streaming-encryption-review.md).
 
 ### B. Password derivation
 
