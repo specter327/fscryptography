@@ -1,206 +1,164 @@
-# Platform feasibility review: Tink Streaming AEAD and Argon2id
+# Cross-platform cryptographic backend feasibility review
 
-**Review date:** 2026-11-19  
-**Status:** documentation-based assessment only; no target-device installation or execution was performed.  
-**Decision:** do not approve either dependency as satisfying the complete five-environment requirement yet.
+**Review date:** 2026-11-20  
+**Status:** documentation and upstream packaging review only; no dependency installation or runtime test was executed on the user's devices.  
+**Decision:** reject Google Tink. Select PyCA `cryptography` as the primary AES-256-GCM backend candidate for a bounded-memory, single-message GCM design, pending implementation-spike tests on every target. Argon2id remains a separate unresolved dependency decision.
 
-## 1. Scope
+## 1. Requirements and scope
 
-This review evaluates the current Python dependency candidates for:
+The library must:
+- preserve AES-256-GCM as the requested file-content encryption algorithm;
+- process one real file per operation with bounded memory;
+- authenticate the complete encrypted file before publishing decrypted plaintext;
+- support GNU/Linux, Windows, macOS, Termux, and Android;
+- avoid changing the intended public API;
+- delegate cryptographic primitives and mode implementation to maintained libraries;
+- avoid an improvised per-block GCM nonce/segment protocol.
 
-- File-content encryption: Google Tink Python, Streaming AEAD, AES-256-GCM-HKDF 1 MiB.
-- Password-derived keys: Argon2id through argon2-cffi.
-- Required environments: GNU/Linux, Windows, macOS, Termux, and Android.
+The public 1 MiB block setting is currently a proposed I/O buffer size. It must not be assumed to be an independently authenticated cryptographic segment size.
 
-The project requirement is cross-platform behavior without changing the public API or silently substituting a different cryptographic algorithm.
+## 2. Decision summary
 
-## 2. Executive result
+| Candidate | AES-256-GCM | Bounded-memory file processing | Termux evidence | Current decision |
+|---|---:|---:|---|---|
+| Google Tink Python Streaming AEAD | Yes, documented profile | Yes, segmented construction | Android/Termux not in supported platform list; user's Termux toolchain already encountered a protoc loader failure | **Rejected by project decision** |
+| PyCA `cryptography` low-level `Cipher(AES, GCM)` context | Yes | Yes, incremental `update()` calls in one GCM invocation | Official Termux package recipe exists and builds cryptography for Android using Termux's Rust/maturin toolchain | **Primary candidate; runtime validation pending** |
+| libsodium `crypto_secretstream_xchacha20poly1305` | No | Yes, purpose-built authenticated streams | libsodium has broad bindings; Termux native package feasibility is plausible but Python binding/runtime still needs testing | Alternative only if algorithm change is explicitly approved |
+| PyNaCl | No direct AES-GCM Streaming AEAD equivalent | SecretStream binding availability/API needs validation | PyNaCl's documented wheels are desktop manylinux/macOS/Windows; no official Android wheel promise | Not selected |
 
-| Environment | Tink Python 1.16.1 | argon2-cffi | Evidence status |
-|---|---|---|---|
-| GNU/Linux x86-64 | Officially supported | Official wheels; source build documented | Documentation-supported |
-| GNU/Linux ARM64 | Officially supported | ARM wheels are published for supported Linux ABIs; source build documented | Documentation-supported, ABI-specific |
-| Windows x86-64 | Officially supported | Official wheels | Documentation-supported |
-| Windows ARM64 | Not listed in Tink's supported Python platforms | Recent bindings publish Windows ARM64 wheels for some Python ABIs | Tink platform gap |
-| macOS x86-64 | Officially supported | Official wheels | Documentation-supported |
-| macOS ARM64 | Officially supported | Official wheels | Documentation-supported |
-| Termux / Android ARM64 | Not listed or officially supported by Tink Python | No official Android/Termux wheel guarantee; source compilation may be possible but is unverified | **Unverified / blocking** |
+## 3. PyCA cryptography and Termux
 
-The five required environments are not equivalent to the desktop platform labels. In particular, Android/Termux uses Android's Bionic C library and Android-specific Python/build environments. A Linux manylinux ARM64 wheel targets glibc and must not be treated as an Android wheel.
+### 3.1 Direct Termux packaging evidence
 
-**Conclusion:** Tink is a viable documented candidate for the listed desktop targets, but current public support statements do not establish Termux/Android compatibility. The combined dependency stack therefore fails the project's all-targets approval gate for now.
+The official `termux/termux-packages` repository contains `packages/python-cryptography/build.sh`. The reviewed recipe pins cryptography **50.0.2** and explicitly:
+- builds from the upstream PyCA cryptography source;
+- uses Termux's Rust setup and Android API level;
+- uses maturin and CFFI build dependencies;
+- installs into the Termux Python prefix;
+- patches the extension's dependency on `libpython` for Android linker behavior.
 
-## 3. Google Tink Python
+This is direct evidence that Termux maintains a native Android/Bionic build path for PyCA cryptography. It is materially stronger than inferring Android compatibility from a manylinux wheel.
 
-### 3.1 Current documented release and platform support
+Official source:
+- https://github.com/termux/termux-packages/blob/master/packages/python-cryptography/build.sh
+- https://github.com/termux/termux-packages/tree/master/packages/python-cryptography
 
-The official Tink Python setup guide currently identifies release **1.16.1**, requires Python **3.10 or newer**, and lists these supported platforms:
+The recipe's existence does **not** prove that the package is installed on the user's current device, that every supported Termux repository mirror currently serves it, or that the exact Python/OpenSSL combination passes fscryptography's required tests. Those must be checked on-device.
 
-- macOS x86-64 and ARM64
-- Linux x86-64 and ARM64
-- Windows x86-64
+### 3.2 AES-GCM incremental context
 
-The guide says pip installs a binary distribution when one is available. Otherwise pip falls back to the source distribution, which requires Bazel or Bazelisk and the Protocol Buffers compiler.
+PyCA documents a low-level `CipherContext` interface with repeated `update(data)` calls followed by `finalize()`. For AEAD modes such as GCM, the context also supports authenticated associated data. The encryption tag is available after finalization; decryption can use `finalize_with_tag(tag)`.
 
-Official references:
+PyCA explicitly warns that GCM provides no ciphertext-integrity guarantee until decryption is complete and that decrypted bytes must not be used before finalization succeeds.
 
-- https://developers.google.com/tink/setup/py
-- https://developers.google.com/tink/supported-key-types
-- https://developers.google.com/tink/streaming-aead
-- https://developers.google.com/tink/streaming-aead/aes_gcm_hkdf_streaming
-- https://pypi.org/project/tink/
+Official documentation:
+- https://cryptography.io/en/stable/hazmat/primitives/symmetric-encryption/
 
-### 3.2 Primitive availability
+This supports a bounded-memory implementation strategy without a custom segmented-AEAD protocol:
+1. Create one AES-256-GCM context for the entire file.
+2. Read the source sequentially in bounded I/O buffers.
+3. Pass each buffer through the same context's `update()`.
+4. Write output only to a private staging file.
+5. Store the final 128-bit authentication tag in the container after successful encryption finalization.
+6. On decryption, feed the entire ciphertext through one GCM decryptor, write only to private staging, and call `finalize_with_tag()`.
+7. Publish plaintext only after tag verification and all structural checks succeed.
 
-The official language matrix lists Streaming AEAD for Python. Tink documents the AES-GCM-HKDF Streaming AEAD family and the AES256_GCM_HKDF_1MB profile.
+The I/O buffer boundaries are not cryptographic segment boundaries. There is one AEAD message and one final authentication tag for the complete file.
 
-This confirms that the required primitive/profile exists in Tink's Python API. It does **not** prove that the package builds or runs on every operating system/ABI.
+### 3.3 Important GCM size limit
 
-Tink recommends AES128_GCM_HKDF_1MB for most use cases in its general guidance; AES-256 remains available as a profile and is retained here because it is the project's requested direction, not because it is Tink's general default recommendation.
+A single GCM invocation has a finite maximum plaintext length (the GCM specification limit is (2^{39}-256) bits, approximately 64 GiB minus 32 bytes). The project must decide whether this is an acceptable maximum file size.
 
-### 3.3 Packaging assessment
+Do not silently split a file into multiple GCM invocations under a custom nonce/counter construction to bypass this limit. Doing so would reintroduce a project-authored segmented protocol and a nonce-allocation problem.
 
-The current Tink Python guide's supported-platform list excludes Android and Termux. The PyPI release publishes desktop platform wheels, including Linux ARM64 wheels tagged for manylinux (glibc), not Android/Bionic.
+If the product must support files beyond the single-invocation GCM limit, the project must revisit the algorithm/construction requirement explicitly and select a reviewed streaming construction. This is an implementation blocker, not a detail to hide.
 
-For a platform without a compatible wheel, pip's documented fallback is a source build requiring Bazel/Bazelisk and protoc. That fallback is not proof of Android compatibility. It must be built and executed in the actual Termux environment. The previous Termux protoc loader failure is an additional reason not to assume that the source-build path works.
+### 3.4 Nonce and key separation
 
-Do not:
-- install a manylinux wheel by renaming or retagging it for Android;
-- infer Android support from Linux ARM64 support;
-- claim that a successful desktop build proves Termux support;
-- replace Tink's construction with a project-authored AES-GCM block protocol.
+Each encrypted file operation needs a fresh 96-bit GCM nonce for the AES-GCM key used by that invocation. Reusing a nonce with the same key is catastrophic.
 
-### 3.4 Preliminary verdict
+The key strategy must therefore prevent nonce reuse across multiple files, retries, concurrent processes, and restarts. A candidate design is to derive a per-file encryption key from the manager's master key and a fresh random per-file salt using a standard KDF (e.g. HKDF), then use a fresh random 96-bit GCM nonce. This is only a design candidate: it requires a precise versioned format, cryptographic review, and usage-bound analysis before implementation. It is not permission to invent ad hoc key derivation or nonce logic.
 
-- GNU/Linux x86-64/ARM64, Windows x86-64, and macOS x86-64/ARM64: **documented candidate**.
-- Windows ARM64: **not in the current Tink Python support list**.
-- Termux/Android: **unsupported by the published support statement; actual source-build feasibility unknown**.
+Official PyCA AES-GCM documentation:
+- https://cryptography.io/en/stable/hazmat/primitives/aead/
 
-Tink remains the primary candidate, but is not approved as the cross-platform dependency.
+## 4. libsodium SecretStream alternative
 
-## 4. Argon2id through argon2-cffi
+libsodium provides `crypto_secretstream_xchacha20poly1305`, specifically designed for encrypted streams and file encryption. It authenticates messages, marks a final message, detects invalid/incomplete streams, and automatically rekeys before its internal counter wraps.
 
-### 4.1 Packaging facts
+Official documentation:
+- https://doc.libsodium.org/secret-key_cryptography/secretstream
 
-The argon2-cffi installation documentation states that:
+However, it uses **XChaCha20-Poly1305**, not AES-256-GCM. It is not a drop-in backend replacement under the current algorithm requirement. It must not be selected without explicit project approval to change that requirement. PyNaCl is a Python binding to libsodium, but its published wheel guidance describes desktop macOS, Windows, and manylinux distributions, not an official Termux wheel guarantee:
+- https://pypi.org/project/PyNaCl/
 
-- argon2-cffi uses argon2-cffi-bindings;
-- the bindings vendor Argon2 C source by default;
-- binary wheels are published for macOS, Windows, and Linux;
-- building from source requires a working C compiler and CFFI environment;
-- the implementation is documented as compiling on common x86 and ARM platforms.
+## 5. Argon2id status
 
-Official references:
+Argon2id remains the preferred password KDF candidate, but its Python binding is not yet approved.
 
-- https://argon2-cffi.readthedocs.io/en/stable/installation.html
-- https://pypi.org/project/argon2-cffi/
-- https://pypi.org/project/argon2-cffi-bindings/
+The official Termux package repository includes a native `argon2` package built from the reference C implementation:
+- https://github.com/termux/termux-packages/blob/master/packages/argon2/build.sh
 
-### 4.2 Android/Termux caveat
+This is useful evidence that the native Argon2 implementation is packaged for Termux. It does **not** establish that `argon2-cffi` installs, links, and runs correctly in Termux Python. Options to test include:
+- building and running a pinned `argon2-cffi` source distribution in Termux;
+- evaluating a maintained Python binding against Termux's packaged native `libargon2`;
+- using a carefully isolated binding layer only if its ABI, portability, and maintenance are demonstrably sound.
 
-The upstream installation documentation does not promise Termux or Android support. Linux ARM64 wheels are built for Linux ABI tags such as manylinux; these are not interchangeable with Android/Bionic.
+No custom Argon2 implementation is permitted.
 
-Because the bindings include native code, Termux requires a real build-and-run test with its own Python, compiler, CFFI, headers, and linker environment. A successful source build on GNU/Linux is insufficient.
+The KDF profile still needs versioned decisions for Argon2 variant, memory/time/parallelism, output length, password encoding and normalization, salt/domain separation, and deterministic behavior. A random per-call salt conflicts with the current same-password/same-profile deterministic-key requirement.
 
-### 4.3 KDF design caveat
+## 6. Required proof-of-compatibility spike
 
-Argon2id is a candidate, not yet an approved derivation profile. Before implementation, specify and version:
+Do not write production library code as part of this spike. Build a disposable test harness and pin exact versions.
 
-- Argon2 variant (Argon2id);
-- salt/domain-separation rule compatible with the requested deterministic behavior;
-- memory cost, time cost, and parallelism;
-- output length;
-- password byte encoding and Unicode normalization;
-- profile/version identifier and future migration rules.
+### 6.1 Target matrix
 
-A random per-call salt would make identical passwords produce different keys, contradicting the current deterministic-key requirement. A fixed public application-specific salt/domain value can provide deterministic output, but it is not secret and does not compensate for a weak password. KDF parameters must be selected with real low-end Android device memory/latency measurements, not desktop benchmarks alone.
+- [ ] GNU/Linux x86-64
+- [ ] GNU/Linux ARM64
+- [ ] Windows x86-64
+- [ ] Windows ARM64 (record separately if in scope)
+- [ ] macOS x86-64
+- [ ] macOS ARM64
+- [ ] Termux Android ARM64
+- [ ] Native Android embedding/runtime, only if it is a distinct delivery target from Termux
 
-### 4.4 Preliminary verdict
+For each environment, record OS version, CPU/ABI, Python version, OpenSSL version, cryptography version, installation source, and package artifact.
 
-- Desktop platforms: **documented candidate**.
-- Termux/Android: **plausible source-build path, not verified or officially guaranteed**.
-- Argon2id profile: **not specified sufficiently for implementation**.
+### 6.2 PyCA cryptography tests
 
-## 5. Required proof-of-compatibility spike
+- [ ] Install from the platform's supported package path; on Termux, test the official `pkg install python-cryptography` package.
+- [ ] Import `cryptography`, `Cipher`, `algorithms.AES`, and `modes.GCM`.
+- [ ] Confirm AES-256-GCM context creation and 16-byte tag behavior.
+- [ ] Encrypt/decrypt empty, small, buffer-boundary, and large test files using repeated `update()` calls.
+- [ ] Verify cross-platform ciphertext interoperability.
+- [ ] Verify wrong-key, wrong-nonce, wrong-AAD, tag tampering, ciphertext tampering, truncation, and missing-tag rejection.
+- [ ] Verify no staged plaintext is published when final authentication fails.
+- [ ] Verify source modification, I/O errors, and process interruption do not publish partial output.
+- [ ] Confirm actual file-size limit behavior and reject inputs beyond the approved limit before destructive work.
+- [ ] Measure throughput and memory usage on low-end Android hardware.
 
-No production library code should be written as part of this spike. Use an isolated test harness and pinned dependency versions.
+### 6.3 Argon2id tests
 
-### 5.1 Environment inventory
+- [ ] Test a pinned `argon2-cffi` source build and runtime on Termux.
+- [ ] Test the native Termux Argon2 package and identify whether a supported Python binding can use it.
+- [ ] Verify published Argon2id test vectors and identical cross-platform outputs for the proposed versioned profile.
+- [ ] Benchmark memory and latency on low-end Android hardware.
+- [ ] Record ABI/linker/runtime dependencies and packaging reproducibility.
 
-For each target, record:
+## 7. Acceptance gate and current decision
 
-- OS and exact version;
-- CPU architecture and ABI;
-- Python implementation and exact version;
-- pip version and supported wheel tags;
-- compiler, linker, Bazel/Bazelisk, protoc, CFFI versions where applicable;
-- dependency version and artifact selected by pip.
+PyCA cryptography is the **primary candidate**, not yet an approved production dependency. Approval requires:
+- successful installation and runtime tests on every required target;
+- reproducible cross-platform AES-256-GCM interoperability;
+- strict final-tag verification before publishing plaintext;
+- a reviewed key-separation and nonce strategy;
+- an explicit accepted maximum file size;
+- acceptable memory and performance measurements;
+- a versioned container specification and independent security review.
 
-Required environments:
+Google Tink is rejected and must not remain in implementation plans or dependency recommendations.
 
-1. GNU/Linux x86-64.
-2. GNU/Linux ARM64.
-3. Windows x86-64.
-4. macOS x86-64.
-5. macOS ARM64.
-6. Termux on Android ARM64.
-7. Native Android execution environment, if distinct from Termux is a project target.
+libsodium SecretStream remains a fallback only if the project explicitly authorizes changing AES-256-GCM to XChaCha20-Poly1305.
 
-Windows ARM64 should be recorded as a separate compatibility gap unless the project explicitly excludes it from the Windows target.
-
-### 5.2 Tink tests
-
-For each environment:
-
-1. Install the exact pinned Tink version using the documented path.
-2. If pip selects an sdist, record and reproduce the complete build toolchain.
-3. Import tink and tink.streaming_aead.
-4. Confirm the AES256_GCM_HKDF_1MB template exists in the installed version.
-5. Register the required configuration and create the Streaming AEAD primitive.
-6. Encrypt and decrypt empty, short, boundary-sized, and multi-segment files.
-7. Verify cross-platform interoperability using a ciphertext created on one platform and decrypted on another.
-8. Verify wrong-key, bit-flip, truncation, segment deletion, segment reordering, and trailing-data behavior.
-9. Confirm final-stream authentication failure never publishes staged plaintext.
-
-### 5.3 Argon2id tests
-
-For each environment:
-
-1. Install the exact pinned argon2-cffi version.
-2. Record whether a wheel or source build was used.
-3. Import the binding and execute Argon2id.
-4. Verify a shared deterministic test vector across platforms.
-5. Verify changes in password/profile inputs produce the expected distinct outputs.
-6. Measure memory consumption and latency on representative low-end Android hardware.
-7. Confirm parameter/version metadata can be serialized and interpreted without changing the public API.
-
-### 5.4 Acceptance criteria
-
-A dependency is approved only when:
-
-- all required target environments install and execute it reproducibly;
-- no wheel is retagged or treated as compatible across ABIs without evidence;
-- the selected Tink profile is available in the exact installed package;
-- cross-platform ciphertext interoperability passes;
-- malformed, truncated, reordered, and modified ciphertext is rejected;
-- failed decryption never publishes plaintext;
-- Argon2id produces the same output for the same versioned profile and password across all targets;
-- resource use is acceptable on low-end Android hardware;
-- dependency versions, licenses, build instructions, and artifacts are recorded.
-
-## 6. Decision and next action
-
-**Do not select Tink + argon2-cffi as the final dependency stack yet.**
-
-Tink has an explicit platform-support gap for Android/Termux (and Windows ARM64), while argon2-cffi's Android source-build path is unverified. The desktop story is substantially stronger, but the project requirement is not desktop-only.
-
-The next action is to execute the proof-of-compatibility spike on actual target environments, beginning with:
-1. Linux Mint x86-64 / Python 3.12;
-2. Termux Android ARM64 / the actual installed Python version;
-3. Windows x86-64;
-4. macOS x86-64 and ARM64;
-5. Linux ARM64.
-
-If Tink cannot be made to work reproducibly on Termux/Android, stop and evaluate a maintained alternative with an explicit AES-256-GCM-compatible Streaming AEAD construction. Do not silently change to XChaCha20-Poly1305 and do not implement a custom nonce/segment protocol. Any algorithm change requires explicit project approval.
-
-**No production dependency, cryptographic format, or public API change is approved by this review.**
+No production code, public API, or encrypted-file format is approved by this review.
