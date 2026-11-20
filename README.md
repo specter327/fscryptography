@@ -1,22 +1,20 @@
 # fscryptography
 
-A cross-platform Python library for authenticated, transactional encryption and decryption of individual files, plus reversible name marking for individual directories.
+A focused, cross-platform Python library for authenticated encryption/decryption of individual stored files and reversible suffix-based renaming of individual directories.
 
-> **Project status:** specification and design phase. No cryptographic format, protocol, or implementation is currently declared stable.
+> **Status:** requirements and design phase. No cryptographic format, dependency, or implementation is approved as stable.
 
 ## Scope
-
-- Encrypt and decrypt the **contents of one regular file per operation**.
-- Encrypt and decrypt the **name of one directory per operation** by appending or removing the `.fscrypt` suffix. Directory contents are never traversed or modified.
-- Preserve original file and directory names; append or remove only the `.fscrypt` suffix.
-- Support GNU/Linux, Windows, macOS, Termux, and Android, with room for future platforms.
-- Use symmetric cryptography through established, maintained cryptographic implementations. The library will not implement cryptographic primitives.
-- Process files sequentially in configurable blocks, with a default block size of 1 MiB.
-- Authenticate encrypted file content and keep the data required for portability inside the encrypted resource.
-- Publish completed results transactionally: incomplete output must never be presented as a completed encrypted or decrypted resource.
+- Encrypt/decrypt the complete content of exactly one regular file per operation.
+- For a directory, modify only its own name by appending/removing the literal **.fscrypt** suffix. Never encrypt its name cryptographically, enumerate children, or modify contents.
+- Preserve original file and directory names; append/remove only the final suffix.
+- Target GNU/Linux, Windows, macOS, Termux, and Android, with future extensibility.
+- Use symmetric cryptography only and delegate primitives/constructions to established, maintained implementations.
+- Process files sequentially with bounded memory; proposed default block size: 1 MiB.
+- Use self-contained, versioned key and encrypted-file representations.
+- Publish outputs only after processing and authentication succeed.
 
 ## API direction
-
 ```python
 random_secret_key = fscryptography.key.generate()
 password_secret_key = fscryptography.key.derive(password="...")
@@ -32,19 +30,17 @@ manager.dir.decrypt(dirpath="...")
 manager.dir.is_encrypted(dirpath="...")
 ```
 
-The API above is the intended public direction, not yet a released compatibility contract. In particular, `dir.is_encrypted()` identifies the suffix convention; it cannot prove that a directory was previously processed by this library. File integrity verification authenticates the complete file content and does not trust the suffix.
+This is the intended API shape, not yet a released compatibility contract. file.is_encrypted() recognizes the encrypted file format, not the suffix alone. file.verify_integrity() authenticates the complete encrypted content. dir.is_encrypted() checks only the suffix convention and cannot prove prior processing. There is no directory integrity operation.
 
 ## Naming convention
-
-| Resource | Before encryption | After encryption |
+| Resource | Before | After |
 |---|---|---|
-| File | `file1.txt` | `file1.txt.fscrypt` |
-| Directory | `dir1/` | `dir1.fscrypt/` |
+| File | file1.txt | file1.txt.fscrypt |
+| Directory | dir1/ | dir1.fscrypt/ |
 
-Decryption removes only the final `.fscrypt` suffix. Original names and extensions remain visible; filename confidentiality is explicitly out of scope.
+Decryption removes exactly the final suffix. Original names and extensions remain visible. **Names are not cryptographically encrypted**; the suffix is only a naming convention.
 
 ## Documentation
-
 - [Functional specification](docs/specification/functional-specification.md)
 - [Public API contract](docs/specification/public-api.md)
 - [Filesystem and transaction behavior](docs/specification/filesystem-behavior.md)
@@ -52,12 +48,10 @@ Decryption removes only the final `.fscrypt` suffix. Original names and extensio
 - [Streaming encryption construction review](docs/research/streaming-encryption-review.md)
 - [Open design decisions](docs/specification/open-decisions.md)
 
-## Security status
+## Cryptographic direction
+AES-256-GCM with AEAD authentication remains the requested algorithm direction. For sequential large-file processing, the preferred candidate is an established Streaming AEAD construction such as Tink AES-256-GCM-HKDF 1 MiB, conditional on reproducible support across every target platform. The project must not invent its own GCM nonce/segment protocol as a shortcut. No dependency or wire format is approved yet.
 
-The current cryptographic requirement is AES-256-GCM, but the project now prefers evaluating an established Streaming AEAD construction (Tink AES-256-GCM-HKDF 1 MiB profile) rather than designing its own block protocol. This remains conditional on proving dependency and API support across all target platforms. No wire format or dependency is approved yet. See the [construction review](docs/research/streaming-encryption-review.md).
+Base64 is an encoding for serialization and transport; it does not protect secret key material.
 
-Base64 is an encoding for convenient serialization and transport. It does not protect or conceal key material: anyone who obtains a serialized secret key can use it.
-
-## Project guarantees
-
-The project will require documented behavior, format/version specifications, automated tests, interoperability tests across supported platforms, corruption/tampering tests, and demonstrations before claiming a capability is supported.
+## Guarantees and validation
+Before claiming support, the project requires coherent specifications, automated tests, cross-platform interoperability tests, tampering/corruption/truncation tests, filesystem interruption tests, and reproducible demonstrations. The project does not promise secure deletion or protection against a compromised host.
