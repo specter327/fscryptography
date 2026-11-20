@@ -3,6 +3,7 @@
 This register separates fixed project requirements from details that must be decided before implementation.
 
 ## Fixed requirements
+
 - Exactly one resource per operation; no batch or recursive behavior.
 - Files: encrypt/decrypt content; preserve the original name and extension; append/remove only the final .fscrypt suffix.
 - Directories: append/remove only the directory's own .fscrypt suffix; never traverse or alter contents. This is a rename convention, not cryptographic name encryption.
@@ -10,7 +11,8 @@ This register separates fixed project requirements from details that must be dec
 - Symmetric cryptography only.
 - No project-authored cryptographic primitives or improvised segmented-AEAD construction.
 - Cold whole-file operations only; no public live read/write/stream interface.
-- Sequential bounded-memory processing; proposed default I/O buffer size 1 MiB.
+- Sequential bounded-memory processing.
+- No fixed application-level maximum file size. The selected format's unavoidable limits and the host platform's filesystem limits must be documented.
 - Self-contained encrypted-file and key representations.
 - Base64 key serialization.
 - Authenticated integrity and explicit corruption/tampering detection.
@@ -19,38 +21,61 @@ This register separates fixed project requirements from details that must be dec
 - Names remain visible; filename confidentiality is out of scope.
 - Google Tink is rejected and must not be used.
 
+## Current cryptographic comparison
+
+The previous single-invocation AES-256-GCM architecture is rejected because it cannot meet the no-fixed-maximum-file-size requirement. A project-authored segmented-GCM construction is not an acceptable workaround.
+
+Two candidates are under evaluation.
+
+### A. libsodium XChaCha20-Poly1305 SecretStream
+
+- Purpose-built authenticated sequence of messages for streaming/file encryption.
+- Per-message authentication, sequence-integrity protection, final-message marker, automatic nonce handling and rekeying.
+- No practical total stream length or message-count limit documented by libsodium; each individual message still has a finite maximum.
+- Python binding candidate: PyNaCl.
+- Termux native libsodium package exists; PyNaCl build/import/runtime on Termux is not yet proven.
+- Best conceptual fit for sequential-only file operations.
+- Must require TAG_FINAL, strict EOF, and private staging until the complete stream validates.
+
+### B. AEGIS-256 Random-Access File (RAF)
+
+- Maintained libaegis C implementation and pyaegis Python binding expose a random-access authenticated file format.
+- RAF v1 uses independently authenticated records, file identity and chunk-index AAD, per-record nonces, authenticated header metadata, and optional external Merkle commitment.
+- RAF v1 logical file size is unsigned 64-bit: finite format-level maximum 2^64 - 1 bytes.
+- RAF v1 uses 16-byte tags, not 32-byte tags.
+- RAF v1 defines a custom Keccak-p[1600,12]-based KDF; do not reimplement it.
+- The RAF format does not define crash recovery or atomic multi-record commit; fscryptography must stage and publish transactionally.
+- pyaegis's generic streaming decryptor buffers all plaintext until final authentication and is not suitable for arbitrary-size bounded-memory decryption. Evaluate RAF only.
+- Source compilation is documented, but all target builds, especially Termux, remain unverified.
+
+Research details: [Streaming cryptographic construction comparison](../research/streaming-cryptographic-construction-comparison.md).
+
 ## Decisions required before implementation
 
-### A. AES-GCM backend and file format
-- **Primary candidate:** PyCA `cryptography`, using one low-level AES-256-GCM cipher context per complete file and incremental I/O through repeated `update()` calls.
-- The official Termux package repository maintains a native `python-cryptography` build recipe. This is promising packaging evidence, not proof of runtime compatibility; the exact package must be installed and tested on the target device.
-- The 1 MiB setting is an I/O buffer size, not an independently authenticated cryptographic segment.
-- One GCM invocation is limited to (2^{39}-256) plaintext bits (approximately 64 GiB minus 32 bytes). Decide whether this maximum file size is acceptable.
-- Do not bypass the GCM limit with an improvised multi-invocation nonce/counter/segment protocol.
-- Every GCM invocation needs a unique nonce for its AES key. Evaluate a reviewed per-file key-separation design using a standard KDF and fresh per-file randomness; do not implement ad hoc nonce allocation.
-- The complete decryption output must remain private staging data until GCM finalization verifies the full tag.
-- Define the outer container header, version, authenticated metadata, nonce, salt/key-derivation metadata, ciphertext, tag placement, parser strictness, and trailing-data behavior.
-- Confirm exact maximum file size, tag size, nonce size, and cryptographic usage bounds.
-- **Alternative only with explicit algorithm approval:** libsodium SecretStream (XChaCha20-Poly1305). It does not satisfy the current AES-256-GCM requirement.
+### A. Algorithm and dependency
+- Complete the same proof-of-compatibility harness for SecretStream/PyNaCl and AEGIS-256 RAF/pyaegis.
+- Validate package maintenance, releases, licenses, dependency tree, and security advisories.
+- Prove source/wheel installation and runtime on GNU/Linux, Windows, macOS, Termux, and native Android if distinct.
+- Compare throughput, peak memory, CPU behavior, and low-end Android performance.
+- Select exactly one versioned construction for the first file format; do not create silent fallback between different algorithms/formats.
+- Decide whether the RAF v1 2^64 - 1 byte size bound is acceptable if RAF is selected. SecretStream is preferred if avoiding a format-level total-size field is more important.
+- No candidate is approved yet.
 
-See [Cross-platform cryptographic backend feasibility review](../research/platform-dependency-feasibility.md).
+### B. Encrypted-file container
+- Exact magic, version, algorithm identifier, header layout, authenticated metadata, framing, and trailing-data policy.
+- For SecretStream: header placement, record framing, message-size limit, final-tag requirement, strict EOF behavior, and how metadata is bound to the stream.
+- For RAF: exact upstream version, algorithm identifier, file ID, chunk size, key derivation, record validation, and how RAF is wrapped without modifying its cryptographic format.
+- Key identifier/profile metadata and future migration behavior.
+- No custom cryptographic composition without independent review.
 
-### B. Password derivation
-- Selected Argon2id implementation and supported runtime on every target, especially Termux.
+### C. Key derivation
+- Key type and entropy requirements for random master keys.
+- Standard, reviewed key derivation/domain separation for file-specific keys if required.
+- Exact Argon2id binding and supported runtime on every target.
 - Exact KDF parameters and profile version.
 - Password encoding and Unicode normalization.
-- Stable salt/domain separation compatible with deterministic derivation.
-- Key representation fields required to preserve derivation compatibility.
+- Stable salt/domain separation compatible with deterministic password-derived keys.
 - Benchmark memory and latency on low-end Android hardware.
-
-The native Argon2 package in Termux does not by itself prove that a supported Python binding is available. Test argon2-cffi source build/runtime or another maintained binding; do not write a custom Argon2 implementation.
-
-### C. Block and file-size configuration
-- Minimum and maximum I/O buffer sizes.
-- Whether buffer size is configurable per operation.
-- Explicit maximum file size compatible with one GCM invocation.
-- Compatibility rules for future container versions and cryptographic profiles.
-- Do not call the I/O buffer a cryptographic segment size.
 
 ### D. Filesystem contract
 - Exact symlink/reparse-point policy on each platform.
@@ -61,6 +86,7 @@ The native Argon2 package in Termux does not by itself prove that a supported Py
 - Concurrent source modification detection.
 - Temporary-file naming, permissions, cleanup, and recovery.
 - Exact atomicity/durability guarantees per platform.
+- Ensure no output is published before complete authentication and structural validation.
 
 ### E. Public API
 - Concrete key object and Base64 serialization interface.
@@ -72,12 +98,13 @@ The native Argon2 package in Termux does not by itself prove that a supported Py
 
 ### F. Compatibility and verification
 - Supported Python versions and packaging targets.
-- Cryptographic dependency availability and maintenance status on each platform.
 - Cross-platform interoperability test matrix.
 - Golden test vectors for key and file formats.
-- Tampering, truncation, wrong-key, missing-tag, and malformed-input tests.
+- Tampering, truncation, wrong-key, missing-final, malformed-input, and trailing-data tests.
 - Filesystem interruption and recovery tests.
 - Independent cryptographic review criteria.
+- Synthetic/sparse tests for very large logical sizes without allocating the entire file.
 
 ## Implementation gate
-Implementation must not begin until security-critical items in A and B, observable behavior in D and E, and interoperability strategy in F have an approved specification. The GCM file-size limit and key/nonce strategy are mandatory decisions, not implementation details.
+
+Implementation must not begin until the algorithm/dependency, container format, key derivation/KDF profile, observable filesystem behavior, transaction guarantees, and interoperability strategy have an approved specification. No fixed project-level file-size maximum is permitted.
