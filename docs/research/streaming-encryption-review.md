@@ -1,129 +1,115 @@
 # Streaming encryption construction review
 
-**Status:** engineering evaluation; no cryptographic protocol or dependency is approved by this document.
+**Status:** updated candidate comparison. No cryptographic protocol or dependency is approved.
 
 ## 1. Objective
 
-Select a construction for encrypting one complete file in bounded-memory sequential blocks. The construction must authenticate every block, bind blocks to their position and file, detect missing/reordered/duplicated/truncated data, and support a final authenticated completion condition.
+Select a construction for encrypting one complete file in bounded-memory sequential blocks. Every data unit must be authenticated, sequence/position integrity must be enforced, truncation must be detected, and the complete encrypted resource must be validated before staged plaintext is published.
 
-The public API remains cold and file-oriented. Internal sequential I/O is an implementation detail. Decryption and verification must stage output privately until the entire container has been authenticated.
+The public API remains cold and file-oriented. fscryptography must not impose a fixed maximum file size.
 
-## 2. Candidates reviewed
+## 2. Rejected approaches
 
-### 2.1 Google Tink Streaming AEAD — closest match
+### 2.1 One AES-GCM invocation per file
 
-Google Tink documents Streaming AEAD for large files and streams. Its segments are bound to their location; segments cannot be removed, reordered, or transplanted between ciphertexts. The documentation describes AES-GCM-HKDF profiles, including 1 MiB profiles, and recommends the 1 MiB profile for general use. The AES-GCM-HKDF construction derives a per-stream key using HKDF and a random salt, and constructs segment nonces from a nonce prefix, segment index, and final-segment indicator.
+Rejected. A single GCM invocation has a finite plaintext limit (approximately 64 GiB minus 32 bytes). It cannot meet the no-fixed-maximum-file-size requirement.
 
-References:
+### 2.2 Project-authored segmented AES-GCM
 
-- https://developers.google.com/tink/streaming-aead
-- https://developers.google.com/tink/streaming-aead/aes_gcm_hkdf_streaming
+Rejected as the default path. It would require the project to design and validate key separation, nonce uniqueness, segment framing, position binding, finalization, malformed-input behavior, cross-file/cross-process safety, and usage bounds. A random identifier plus a counter is not by itself a complete nonce-safety argument.
 
-**Advantages**
-- Closely matches the requested AES-GCM and 1 MiB segmented processing direction.
-- Uses a reviewed, specified construction rather than requiring this project to invent nonce allocation and framing.
-- Per-stream key derivation separates files encrypted under a long-lived master key.
-- Segment position and final-segment state are incorporated into the construction.
-- Has explicit documented limits, rather than implying unbounded AES-GCM use.
+### 2.3 Google Tink Streaming AEAD
 
-**Limitations and integration questions**
-- Tink's documented streaming API may expose authenticated plaintext segments before the complete stream has been consumed. This is acceptable only behind this library's private temporary-output transaction; no plaintext destination may be published until final authentication succeeds.
-- The Tink wire format is its own format. Wrapping it in another independently designed segment protocol would add unnecessary cryptographic complexity.
-- The availability, packaging, supported Python versions, native-extension build requirements, and actual Android/Termux support of the required Tink implementation must be verified. Desktop support alone is insufficient.
-- The exact profile and key size must be checked against the installed implementation and its maintained API. Do not infer that a profile is available on every target from the general specification.
+Rejected by project decision because the required Python dependency does not meet the project's Termux support requirement. Do not reintroduce Tink as a candidate.
 
-**Assessment:** preferred protocol reference and first implementation candidate, subject to a mandatory platform/dependency proof. If adopted, use the standardized construction as specified; do not reproduce its cryptographic internals in project code.
+## 3. Candidate A — libsodium SecretStream
 
-### 2.2 libsodium secretstream — strong alternative, different algorithm
+libsodium SecretStream is designed for authenticated message sequences and file encryption. It provides a stream header, per-message authentication, sequence-integrity protection, a final-message tag, automatic nonce handling, and automatic/explicit rekeying. Its documentation states there are no practical limits to total stream length or message count, while each individual message remains bounded by a native API maximum.
 
-libsodium secretstream provides authenticated message sequences with a header, per-message authentication, ordering protection, a final tag, and automatic/explicit rekeying. Its documented file-encryption example processes files in chunks. It uses XChaCha20-Poly1305, not AES-GCM.
+PyNaCl exposes low-level SecretStream bindings. Each message is passed as a bounded Python bytes object.
 
 References:
-
 - https://doc.libsodium.org/secret-key_cryptography/secretstream
-- https://doc.libsodium.org/secret-key_cryptography/aead
+- https://github.com/pyca/pynacl/blob/main/src/nacl/bindings/crypto_secretstream.py
 
 **Advantages**
-- Purpose-built for authenticated streams and large files.
-- Explicit final-message semantics detect incomplete streams.
-- Rekeying is part of the construction.
-- Strong fit for bounded-memory sequential processing.
+- Closely matches sequential file processing.
+- No practical total stream length limit documented.
+- Built-in sequence integrity, final marker, nonce handling, and rekeying.
+- No random-access machinery required.
 
 **Limitations**
-- Does not meet the current AES-256-GCM direction.
-- Python binding availability and native libsodium packaging still require platform validation, especially on Android/Termux.
+- Termux native libsodium availability does not prove PyNaCl installation/runtime.
+- The outer file container still needs strict versioning, framing, metadata binding, final-tag handling, and EOF rules.
+- The file adapter must not publish plaintext until the final tag and strict EOF checks succeed.
 
-**Assessment:** technically credible fallback only if the project explicitly revises its AES requirement. It must not be silently substituted.
+**Assessment:** provisional preferred candidate, pending complete platform validation.
 
-### 2.3 Project-authored AES-GCM block protocol
+## 4. Candidate B — AEGIS-256 RAF
 
-A custom design using AES-GCM, random resource identifiers, block counters, and AAD could be made to work, but would require the project to specify and validate key separation, nonce uniqueness, GCM usage limits, framing, finalization, malformed-input behavior, and cross-file/cross-process safety.
+libaegis provides a random-access authenticated file format. pyaegis exposes RAF classes and file-backed storage. RAF v1 authenticates a header and fixed-size records; record AAD binds file identity, chunk index, and chunk size. It supports chunks from 1 KiB to 1 MiB and uses fresh random nonces per record.
 
-A random identifier plus a counter is not by itself a complete nonce-safety argument. Reusing a GCM nonce with the same key is catastrophic. A custom design would duplicate work already addressed by established streaming-AEAD constructions and increase review burden.
-
-**Assessment:** reject as the default path. Reconsider only if no maintained implementation can satisfy the platform matrix and after independent cryptographic review. Do not improvise a new nonce scheme during implementation.
-
-## 3. Recommendation
-
-1. Keep AES-256-GCM as the current project requirement pending explicit approval to change it.
-2. Evaluate a maintained Tink Streaming AEAD implementation as the primary candidate, specifically the AES-256-GCM-HKDF 1 MiB profile where available.
-3. Do not create a second project-specific block-encryption protocol around Tink. The library's own file container should be limited to the minimum required for format identification and compatibility, unless Tink's format already provides the needed self-description.
-4. Implement a platform capability spike before selecting the dependency: GNU/Linux, Windows, macOS, Termux, and Android must all be considered. Record exact Python versions, wheels/native builds, ABI constraints, and reproducible installation steps.
-5. Keep libsodium secretstream as a documented alternative, not an interchangeable backend. Switching to it changes the cryptographic algorithm and requires explicit project approval.
-6. If no suitable maintained implementation is available on all required platforms, stop before implementation and present the compatibility gap. Do not silently implement the primitive or invent a custom protocol as a workaround.
-
-## 4. Transaction boundary
-
-Regardless of the chosen streaming construction:
-
-- Encryption writes only to a private temporary file.
-- Decryption writes only to a private temporary plaintext file.
-- Every segment must authenticate successfully.
-- The construction's final completion condition must be observed and validated.
-- The complete input must be consumed so trailing garbage or malformed extra records can be rejected according to the format.
-- Only then may the result be published.
-- On any authentication, parsing, or I/O failure, the destination must not be presented as a completed result; temporary plaintext must be removed on a best-effort basis.
-- `verify_integrity` must consume and authenticate the entire encrypted file.
-
-A streaming-AEAD API authenticating each segment does not, by itself, provide the filesystem transaction guarantee. That guarantee belongs to the library's filesystem layer.
-
-## 5. Password-derived key direction
-
-The requested deterministic behavior means that the same password and same derivation profile must produce the same key. A per-call random salt would violate that requirement.
-
-Recommended direction for further specification: a password KDF with a fixed, public, application-specific salt/domain value and explicitly versioned parameters. Argon2id is a candidate, but must be evaluated for availability and resource behavior on all target platforms. The fixed salt is not a secret and does not make a weak password strong; it means identical password/profile inputs intentionally produce identical key material. Domain separation and profile versioning are mandatory.
-
-Do not derive a key by hashing the password once, and do not silently change KDF parameters for an existing profile. Any future parameter change must have a distinct profile/version.
-
-## 6. Blocking questions
-
-- Does the selected Tink Python implementation expose the required AES-256-GCM-HKDF streaming profile?
-- Can it be installed and run on every required target, especially Termux and Android, without relying on unsupported native builds?
-- Is the dependency maintained for the Python versions the project intends to support?
-- Does its API expose final-stream validation in a way that can be made mandatory before publication?
-- What exact stable password-derivation profile can be supported across all targets?
-
-Until these are answered with reproducible evidence, the cryptographic protocol and dependency remain unapproved.
-
-
-## 7. Python support verification (documentation review)
-
-The official Tink language-support matrix lists Streaming AEAD for Python. Tink's Python documentation demonstrates the `streaming_aead` module and the StreamingAead primitive. The documented key-template set includes `AES256_GCM_HKDF_1MB`. Therefore, Python-level support for the required primitive/profile is evidenced; this is stronger than the initial assumption that only a generic Tink implementation might exist.
+RAF v1 stores logical file size as unsigned 64-bit, so its format-level maximum is 2^64 - 1 bytes. It uses 16-byte tags, not 32-byte tags. Its custom per-file RAF_KDF is based on Keccak-p[1600,12]; do not reproduce it in project code. RAF v1 does not define journaling or crash recovery. An optional Merkle commitment is separate from the RAF file.
 
 References:
+- https://github.com/aegis-aead/libaegis
+- https://github.com/aegis-aead/libaegis/blob/main/RAF.md
+- https://github.com/jedisct1/pyaegis
+- https://www.rfc-editor.org/rfc/rfc10032.html
 
-- https://developers.google.com/tink/supported-key-types
-- https://developers.google.com/tink/streaming-aead
-- https://fuchsia.googlesource.com/third_party/tink/+/refs/heads/main/docs/PYTHON-HOWTO.md
-- https://fuchsia.googlesource.com/third_party/tink/+/8e5717cd1bb7897b8462e56e7abeeec0f7bf9ffb/testing/cross_language/util/supported_key_types.py
+**Advantages**
+- Documented authenticated file format and per-record integrity.
+- Random access and optional whole-file Merkle commitment.
+- pyaegis provides a Python RAF API and source compilation path.
 
-Tink's documentation recommends AES-128-GCM-HKDF 1 MiB for most use cases, but explicitly lists AES-256-GCM-HKDF 1 MiB as an available profile. Retaining AES-256 is therefore possible in the documented construction, although the project should not claim it is the default recommendation of Tink.
+**Limitations**
+- More complex than required by the sequential public contract.
+- Finite 64-bit logical-size field.
+- Custom format KDF and 128-bit tags need explicit review.
+- Transaction/recovery behavior must be provided by fscryptography.
+- Termux and all desktop builds remain unverified.
 
-**Still unverified:** current PyPI wheel coverage, supported Python versions, build-from-source requirements, and successful installation/execution under Android/Termux and all desktop targets. A language support matrix does not establish packaging support for every OS/CPU/Python ABI. An older Python installation guide lists a limited set of Linux/macOS wheels and is not sufficient evidence for current releases or Android support. This must be tested against the exact package release selected by the project.
+**Important:** pyaegis generic streaming decryption buffers all plaintext until final verification. It is not suitable for arbitrary-size bounded-memory decryption. Only the RAF API is a candidate.
 
+**Assessment:** serious alternative, pending platform and security validation.
 
-## 8. Decision on the proposed per-block nonce scheme
+## 5. Provisional recommendation
 
-The project proposal of a 96-bit AES-GCM nonce per block, a block counter, a random resource/operation identifier, and AAD binding the block position is recorded as a requirement to evaluate, but **is not approved as a project-authored protocol**. A random identifier plus a counter does not by itself prove nonce uniqueness across multiple files, repeated operations, concurrent processes, retries, and restarts when a key is reused. Implementing this safely would require a complete key-separation and usage-bound analysis. The preferred course is to delegate segment framing, per-stream key derivation, nonce construction, position binding, and finalization to the selected established Streaming AEAD implementation. The project-specific format should remain an outer identification/version layer only, unless further reviewed requirements justify more.
+Prefer libsodium SecretStream via PyNaCl if it passes Termux and all other platform tests. It is the simpler fit for sequential file operations and avoids a finite total-size field in the encrypted-file format.
 
-The public requirement remains AES-256-GCM unless the project explicitly approves a change. Tink's AES-256-GCM-HKDF profile is a candidate, not yet a dependency selection. The 1 MiB proposal is subject to the actual implementation's segment-size/profile semantics; it must not be assumed that an application-level configurable block size can arbitrarily alter a fixed cryptographic profile.
+Keep AEGIS-256 RAF in the comparative proof-of-compatibility spike. Select it only if test results or project requirements justify random-access semantics and its 64-bit size bound.
+
+This is not final approval. Do not implement production code or a file format yet.
+
+## 6. Transaction boundary
+
+Regardless of the chosen construction:
+- Encryption writes only to a private temporary file.
+- Decryption writes only to a private temporary plaintext file.
+- Every message or required record must authenticate successfully.
+- SecretStream must reach exactly one TAG_FINAL; RAF must validate the header and every required record.
+- The complete input must be consumed and trailing data handled according to the selected format.
+- Only then may the result be published.
+- On authentication, parsing, or I/O failure, the destination must not be presented as completed; temporary plaintext must be removed on a best-effort basis.
+- verify_integrity must authenticate the complete encrypted file.
+
+Per-message/record authentication does not itself provide a filesystem transaction. That guarantee belongs to fscryptography's filesystem layer.
+
+## 7. Password-derived key direction
+
+The requested deterministic behavior means the same password and same derivation profile must produce the same key. A per-call random salt would violate that requirement.
+
+Argon2id remains a candidate password KDF, but its Python binding and runtime must be tested on every target, especially Termux. A fixed public application salt/domain value is not secret and does not make weak passwords strong. Domain separation and versioned parameters are mandatory. Do not implement a custom Argon2 function.
+
+## 8. Blocking work
+
+- Reproducible PyNaCl/SecretStream install and runtime on all required platforms.
+- Reproducible pyaegis/RAF install and runtime on all required platforms.
+- Cross-platform fixtures and test vectors.
+- Tampering, truncation, reordering, deletion, duplication, missing-final, malformed-container, and trailing-data tests.
+- Memory and performance measurements on low-end Android.
+- Filesystem interruption and transactional publication tests.
+- Dependency maintenance, license, and independent security review.
+- Exact file-size semantics and all unavoidable format/platform limits.
+
+No production dependency, algorithm, public API, or encrypted-file format is selected by this review.
