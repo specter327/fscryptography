@@ -90,3 +90,20 @@ Invalid or unauthentic content must be distinguishable from operational failures
 ## 9. Required review before implementation
 
 No file format or cryptographic protocol should be implemented until the nonce/key strategy, framing, AAD, finalization, KDF, usage limits, and failure semantics have been specified and reviewed. Prefer an established streaming/file-encryption construction if it meets the functional constraints; otherwise obtain focused cryptographic review of the custom composition.
+
+
+## 10. Construction selection update
+
+The project has evaluated established streaming authenticated-encryption constructions. The preferred candidate is Google Tink Streaming AEAD using the AES-256-GCM-HKDF 1 MiB profile, **conditional on verifying the exact Python API/profile and reproducible support on GNU/Linux, Windows, macOS, Termux, and Android**.
+
+The evaluation is documented in [Streaming encryption construction review](../research/streaming-encryption-review.md).
+
+This is a candidate, not an approved dependency or file format. The project should not reproduce Tink's segment protocol or invent a parallel AES-GCM nonce scheme. If the required implementation cannot be supported on the target matrix, stop and report the incompatibility. libsodium secretstream is a technically credible alternative, but uses XChaCha20-Poly1305 and therefore requires explicit approval to change the algorithm requirement.
+
+## 11. Transactional use of streaming AEAD
+
+Per-segment authentication does not mean a whole file has been successfully decrypted. The filesystem layer must write decrypted segments only to a private temporary file, consume the complete encrypted input, validate the construction's final completion condition, reject malformed trailing data as required by the format, and publish plaintext only after all checks succeed. The same full-consumption rule applies to `file.verify_integrity()`.
+
+## 12. Deterministic password derivation direction
+
+A random salt generated for each call is incompatible with the specified deterministic behavior. The candidate direction is a password KDF with a fixed, public, application-specific salt/domain value and versioned parameters. Argon2id remains a candidate pending platform availability and resource testing. The salt is not secret; deterministic derivation means equal password/profile inputs intentionally yield equal key material. Weak passwords remain vulnerable to offline guessing. Never replace this construction with a single fast hash of the password or silently change parameters within an existing profile.
